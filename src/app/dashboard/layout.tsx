@@ -34,7 +34,7 @@ export default function DashboardLayout({
     { label: "کیف پول و شارژ", href: "/dashboard/wallet", icon: Wallet },
     { label: "زیرمجموعه‌گیری", href: "/dashboard/referral", icon: User },
     { label: "تاریخچه جوایز", href: "/dashboard/history", icon: History },
-    { label: "قوانین و مقررات", href: "/dashboard/rules", icon: ShieldCheck },
+    { label: "قوانین و مقررات", href: "/dashboard/rules", icon: ShieldCheck }
   ]
 
   return (
@@ -114,28 +114,29 @@ export default function DashboardLayout({
                 <User size={14} className="text-[#D4AF37]" />
               </div>
               <div className="flex flex-col">
-                  <span className="text-white/20 text-[10px] leading-none mb-1">پنل کاربری</span>
-                  <span className="text-xs font-bold text-white">خوش آمدید، علیرضا عزیز</span>
-                </div>
+                <span className="text-white/20 text-[10px] leading-none mb-1">پنل کاربری</span>
+                <span className="text-xs font-bold text-white">خوش آمدید، علیرضا عزیز</span>
               </div>
             </div>
+          </div>
 
-            <div className="flex items-center gap-3 md:gap-6">
-              <div className="hidden md:flex items-center gap-4 bg-white/5 px-4 py-2 rounded-xl border border-white/5">
-                <div className="text-right">
-                  <p className="text-[10px] text-white/40 font-bold uppercase tracking-widest leading-none mb-1">موجودی کیف پول</p>
-                  <p className="text-sm font-black text-[#D4AF37]">۲۵,۴۰۰,۰۰۰ تومان</p>
-                </div>
-                <Link href="/dashboard/wallet" className="w-8 h-8 bg-[#D4AF37] rounded-lg flex items-center justify-center hover:scale-105 transition-transform">
-                  <Wallet className="w-4 h-4 text-black" />
-                </Link>
+          <div className="flex items-center gap-3 md:gap-6">
+            <div className="hidden md:flex items-center gap-4 bg-white/5 px-4 py-2 rounded-xl border border-white/5">
+              <div className="text-right">
+                <p className="text-[10px] text-white/40 font-bold uppercase tracking-widest leading-none mb-1">موجودی کیف پول</p>
+                <p className="text-sm font-black text-[#D4AF37]">۲۵,۴۰۰,۰۰۰ تومان</p>
               </div>
+              <Link href="/dashboard/wallet" className="w-8 h-8 bg-[#D4AF37] rounded-lg flex items-center justify-center hover:scale-105 transition-transform">
+                <Wallet className="w-4 h-4 text-black" />
+              </Link>
+            </div>
 
-              <div className="flex items-center gap-4">
-            <button className="relative p-2 hover:bg-white/5 rounded-xl transition-colors group">
-              <Bell size={20} className="text-white/40 group-hover:text-white transition-colors" />
-              <span className="absolute top-2 right-2 w-2 h-2 bg-[#D4AF37] rounded-full border-2 border-[#050505]" />
-            </button>
+            <div className="flex items-center gap-4">
+              <button className="relative p-2 hover:bg-white/5 rounded-xl transition-colors group">
+                <Bell size={20} className="text-white/40 group-hover:text-white transition-colors" />
+                <span className="absolute top-2 right-2 w-2 h-2 bg-[#D4AF37] rounded-full border-2 border-[#050505]" />
+              </button>
+            </div>
           </div>
         </header>
 

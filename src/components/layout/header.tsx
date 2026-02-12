@@ -24,6 +24,7 @@ export function Header() {
     { label: "خانه", href: "/" },
     { label: "قرعه‌کشی‌ها", href: "/raffles" },
     { label: "گردونه شانس", href: "/wheel" },
+    { label: "ماشین اسلاید", href: "/slide-game" },
     { label: "مزایده‌ها", href: "/auction" },
     { label: "درباره ما", href: "/about" },
   ]

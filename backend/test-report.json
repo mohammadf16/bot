@@ -1,0 +1,43 @@
+{
+  "metadata": {
+    "executedAt": "2026-02-13T21:35:47.952Z",
+    "nodeVersion": "v22.12.0",
+    "platform": "win32"
+  },
+  "testReport": {
+    "testRunId": "92a99b04ce7a3d59e571516c6e90b04d",
+    "createdAt": "2026-02-13T21:35:47.952Z",
+    "config": {
+      "testUserCount": 100,
+      "spinsPerUser": 5,
+      "testPrefix": "test_"
+    },
+    "stats": {
+      "usersCreated": 100,
+      "totalSpinsPerformed": 500,
+      "spinsBySegment": {
+        "۵۰ میلیون": 84,
+        "۵ میلیون": 86,
+        "شانس اضافه": 130,
+        "۱۰ میلیون": 66,
+        "طلای آب شده": 57,
+        "پوچ": 77
+      },
+      "walletTransactions": 198,
+      "totalWalletValue": 3747761234,
+      "auditLogsCreated": 100
+    },
+    "validation": {
+      "passed": true,
+      "errors": [],
+      "warnings": []
+    }
+  },
+  "storeSnapshot": {
+    "usersCount": 101,
+    "wheelSpinsCount": 500,
+    "walletTransactionsCount": 198,
+    "auditLogsCount": 100,
+    "rafflesCount": 1
+  }
+}

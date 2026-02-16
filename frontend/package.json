@@ -9,7 +9,7 @@
     "dev": "cross-env NEXT_IGNORE_INCORRECT_LOCKFILE=1 next dev",
     "build": "cross-env NEXT_IGNORE_INCORRECT_LOCKFILE=1 next build",
     "build:host": "cross-env NEXT_IGNORE_INCORRECT_LOCKFILE=1 NEXT_STATIC_EXPORT=true next build",
-    "build:host:out": "cross-env NEXT_IGNORE_INCORRECT_LOCKFILE=1 NEXT_STATIC_EXPORT=true NEXT_BASE_PATH=/out next build",
+    "build:host:out": "cross-env NEXT_IGNORE_INCORRECT_LOCKFILE=1 NEXT_STATIC_EXPORT=true NEXT_BASE_PATH=/out NEXT_PUBLIC_BASE_PATH=/out next build",
     "start": "cross-env NEXT_IGNORE_INCORRECT_LOCKFILE=1 next start",
     "lint": "next lint",
     "backend:dev": "npm --prefix ../backend run dev",

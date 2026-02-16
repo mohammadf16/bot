@@ -1,41 +1,41 @@
 @font-face {
   font-family: "IRANSans";
-  src: url("/assets/font/IRANSANS.TTF") format("truetype");
+  src: url("/out/assets/font/IRANSANS.TTF") format("truetype"), url("/assets/font/IRANSANS.TTF") format("truetype");
   font-weight: normal;
   font-style: normal;
 }
 
 @font-face {
   font-family: "IRANSans";
-  src: url("/assets/font/IRANSANS_BOLD.TTF") format("truetype");
+  src: url("/out/assets/font/IRANSANS_BOLD.TTF") format("truetype"), url("/assets/font/IRANSANS_BOLD.TTF") format("truetype");
   font-weight: bold;
   font-style: normal;
 }
 
 @font-face {
   font-family: "IRANSans";
-  src: url("/assets/font/IRANSANS_MEDIUM.TTF") format("truetype");
+  src: url("/out/assets/font/IRANSANS_MEDIUM.TTF") format("truetype"), url("/assets/font/IRANSANS_MEDIUM.TTF") format("truetype");
   font-weight: 500;
   font-style: normal;
 }
 
 @font-face {
   font-family: "IRANSans";
-  src: url("/assets/font/IRANSANS_LIGHT.TTF") format("truetype");
+  src: url("/out/assets/font/IRANSANS_LIGHT.TTF") format("truetype"), url("/assets/font/IRANSANS_LIGHT.TTF") format("truetype");
   font-weight: 300;
   font-style: normal;
 }
 
 @font-face {
   font-family: "IRANSans";
-  src: url("/assets/font/IRANSANS_ULTRALIGHT.TTF") format("truetype");
+  src: url("/out/assets/font/IRANSANS_ULTRALIGHT.TTF") format("truetype"), url("/assets/font/IRANSANS_ULTRALIGHT.TTF") format("truetype");
   font-weight: 200;
   font-style: normal;
 }
 
 @font-face {
   font-family: "IRANSans";
-  src: url("/assets/font/IRANSANS_BLACK.TTF") format("truetype");
+  src: url("/out/assets/font/IRANSANS_BLACK.TTF") format("truetype"), url("/assets/font/IRANSANS_BLACK.TTF") format("truetype");
   font-weight: 900;
   font-style: normal;
 }

@@ -5,19 +5,22 @@ import { useEffect, useRef, useState } from "react"
 import Link from "next/link"
 import { ArrowLeft, ChevronDown, Crown, Gift, Smartphone, Trophy, CircleDollarSign, CarFront } from "lucide-react"
 
+const basePath = process.env.NEXT_PUBLIC_BASE_PATH ?? ""
+const withBasePath = (path: string) => `${basePath}${path}`
+
 const HERO_SLIDES = [
   {
-    image: "/photo/1.avif",
+    image: withBasePath("/photo/1.avif"),
     title: "فروش خودرو و قرعه کشی هوشمند",
     subtitle: "خرید خودرو، خرید بلیط، کش بک و بازی مالی در یک پلتفرم یکپارچه.",
   },
   {
-    image: "/photo/2.avif",
+    image: withBasePath("/photo/2.avif"),
     title: "اسلایدر زنده خودروها",
     subtitle: "از اقتصادی تا لوکس، با جزئیات کامل و امکان خرید مستقیم یا اقساطی.",
   },
   {
-    image: "/photo/3.jpg",
+    image: withBasePath("/photo/3.jpg"),
     title: "شانس واقعی با شفافیت واقعی",
     subtitle: "گردونه شانس، ماشین اسلاید و قرعه کشی با قوانین شفاف و قابل پیگیری.",
   },

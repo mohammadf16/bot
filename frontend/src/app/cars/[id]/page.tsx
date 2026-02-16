@@ -39,21 +39,32 @@ const carMap = {
 
 type CarKey = keyof typeof carMap
 
+const basePath = process.env.NEXT_PUBLIC_BASE_PATH ?? ""
+
+function withBasePath(path: string): string {
+  return `${basePath}${path}`
+}
+
+export function generateStaticParams() {
+  return Object.keys(carMap).map((id) => ({ id }))
+}
+
 export default function CarDetailPage({ params }: { params: { id: string } }) {
   const key = (params.id in carMap ? params.id : "toyota-corolla-2023") as CarKey
   const car = carMap[key]
+  const carImage = withBasePath(car.image)
 
   return (
     <main className="min-h-screen pt-32 pb-20" dir="rtl">
       <div className="max-w-7xl mx-auto px-4 grid lg:grid-cols-2 gap-8 text-right">
         <section>
           <div className="relative overflow-hidden rounded-[2rem] border border-white/10">
-            <img src={car.image} alt={car.title} className="w-full h-[430px] object-cover" />
+            <img src={carImage} alt={car.title} className="w-full h-[430px] object-cover" />
             <div className="absolute top-4 right-4 bg-accent-gold text-black text-xs font-black px-3 py-1 rounded-full">آماده تحویل</div>
           </div>
           <div className="mt-3 grid grid-cols-4 gap-2">
             {[1, 2, 3, 4].map((i) => (
-              <img key={i} src={car.image} alt={`${car.title}-${i}`} className="h-20 w-full object-cover rounded-xl border border-white/10" />
+              <img key={i} src={carImage} alt={`${car.title}-${i}`} className="h-20 w-full object-cover rounded-xl border border-white/10" />
             ))}
           </div>
         </section>

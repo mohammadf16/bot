@@ -2,7 +2,7 @@
 
 import React, { useEffect, useMemo, useState } from "react"
 import toast from "react-hot-toast"
-import { ArrowLeft, CarFront, ShieldCheck, Sparkles, Ticket, Zap, Award, Users, Crown, Gem, Wallet, Timer, ChevronDown, CircleDollarSign, Gift } from "lucide-react"
+import { ShieldCheck, Sparkles, Ticket, Users, Wallet, Timer, ChevronDown, Gift } from "lucide-react"
 import { motion, AnimatePresence, useMotionTemplate } from "framer-motion"
 
 // --- Mocking Dependencies to run in this environment ---
@@ -16,7 +16,7 @@ const useAuth = () => ({
 })
 
 // Mock API Request
-const apiRequest = async <T,>(url: string, options?: any, config?: any): Promise<T> => {
+const apiRequest = async <T,>(url: string, _options?: any, _config?: any): Promise<T> => {
   return new Promise((resolve) => {
     setTimeout(() => {
       if (url === "/raffles") {

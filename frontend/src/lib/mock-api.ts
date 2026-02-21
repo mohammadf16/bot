@@ -228,11 +228,19 @@ let showroomVehicles = (mockData.MOCK_VEHICLES as Array<{
 })
 let showroomOrders: ShowroomOrder[] = []
 let mockLoans = JSON.parse(JSON.stringify(mockData.MOCK_LOANS)) as LoanMock[]
-let liveAuctions = (mockData.MOCK_AUCTIONS as AuctionMock[]).map((auction) => ({
-  ...auction,
-  bidsCount: Math.max(auction.bidsCount ?? 0, auction.topBidder ? 1 : 0),
-  minStep: 10_000_000,
-}))
+let liveAuctions = (
+  mockData.MOCK_AUCTIONS as Array<
+    Omit<AuctionMock, "endAt"> & { endAt?: string; endsAt?: string; minStep?: number; bidsCount?: number }
+  >
+).map((auction) => {
+  const { endsAt, ...rest } = auction
+  return {
+    ...rest,
+    endAt: String(rest.endAt ?? endsAt ?? new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString()),
+    bidsCount: Math.max(rest.bidsCount ?? 0, rest.topBidder ? 1 : 0),
+    minStep: rest.minStep ?? 10_000_000,
+  }
+})
 let raffles = (mockData.MOCK_RAFFLES as Array<{
   id: string
   title: string

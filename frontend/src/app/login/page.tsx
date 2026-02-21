@@ -1,6 +1,6 @@
 "use client"
 
-import { FormEvent, useState } from "react"
+import { FormEvent, useEffect, useState } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import toast from "react-hot-toast"
@@ -9,18 +9,24 @@ import { useAuth } from "@/lib/auth-context"
 
 export default function LoginPage() {
   const router = useRouter()
-  const { login } = useAuth()
+  const { login, isAuthenticated, isLoading } = useAuth()
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [loading, setLoading] = useState(false)
+
+  useEffect(() => {
+    if (!isLoading && isAuthenticated) {
+      router.replace("/")
+    }
+  }, [isAuthenticated, isLoading, router])
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault()
     setLoading(true)
     try {
-      const loggedInUser = await login({ email, password })
+      await login({ email, password })
       toast.success("ورود با موفقیت انجام شد")
-      router.push(loggedInUser.role === "admin" ? "/admin/dashboard" : "/dashboard")
+      router.replace("/")
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "خطا در ورود")
     } finally {

@@ -55,26 +55,26 @@ export default function CarDetailPage({ params }: { params: { id: string } }) {
   const carImage = withBasePath(car.image)
 
   return (
-    <main className="min-h-screen pt-32 pb-20" dir="rtl">
+    <main className="min-h-screen pt-24 md:pt-32 pb-20" dir="rtl">
       <div className="max-w-7xl mx-auto px-4 grid lg:grid-cols-2 gap-8 text-right">
         <section>
-          <div className="relative overflow-hidden rounded-[2rem] border border-white/10">
-            <img src={carImage} alt={car.title} className="w-full h-[430px] object-cover" />
+          <div className="relative overflow-hidden rounded-[2rem] border border-white/10 bg-black/35">
+            <img src={carImage} alt={car.title} className="w-full h-[260px] sm:h-[340px] md:h-[430px] object-contain md:object-cover" />
             <div className="absolute top-4 right-4 bg-accent-gold text-black text-xs font-black px-3 py-1 rounded-full">آماده تحویل</div>
           </div>
           <div className="mt-3 grid grid-cols-4 gap-2">
             {[1, 2, 3, 4].map((i) => (
-              <img key={i} src={carImage} alt={`${car.title}-${i}`} className="h-20 w-full object-cover rounded-xl border border-white/10" />
+              <img key={i} src={carImage} alt={`${car.title}-${i}`} className="h-16 sm:h-20 w-full object-contain bg-black/35 rounded-xl border border-white/10" />
             ))}
           </div>
         </section>
 
-        <section className="card glass p-8">
-          <h1 className="text-4xl font-black mb-2">{car.title}</h1>
-          <p className="text-2xl font-black text-accent-gold mb-2">{car.price.toLocaleString("fa-IR")} تومان</p>
+        <section className="card glass p-5 md:p-8">
+          <h1 className="text-2xl md:text-4xl font-black mb-2">{car.title}</h1>
+          <p className="text-xl md:text-2xl font-black text-accent-gold mb-2">{car.price.toLocaleString("fa-IR")} تومان</p>
           <p className="text-dark-text/60 text-sm mb-5">کد خودرو: {car.code}</p>
 
-          <div className="grid grid-cols-2 gap-3 mb-6 text-sm">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-6 text-sm">
             <div className="bg-dark-bg/50 border border-dark-border/40 rounded-xl p-3 inline-flex items-center gap-2"><GaugeCircle size={14} /> کارکرد: {car.mileage}</div>
             <div className="bg-dark-bg/50 border border-dark-border/40 rounded-xl p-3 inline-flex items-center gap-2"><Fuel size={14} /> سوخت: {car.fuel}</div>
             <div className="bg-dark-bg/50 border border-dark-border/40 rounded-xl p-3 inline-flex items-center gap-2"><Calendar size={14} /> سال: {car.year}</div>
@@ -92,10 +92,10 @@ export default function CarDetailPage({ params }: { params: { id: string } }) {
             <Link href="/loan" className="btn-primary mt-4 inline-flex">درخواست وام</Link>
           </div>
 
-          <div className="flex flex-wrap gap-3">
-            <button className="btn-primary">خرید مستقیم</button>
-            <button className="btn-secondary inline-flex items-center gap-2"><Heart size={16} /> افزودن به علاقه مندی ها</button>
-            <button className="btn-secondary inline-flex items-center gap-2"><Share2 size={16} /> اشتراک گذاری</button>
+          <div className="flex flex-col sm:flex-row sm:flex-wrap gap-3">
+            <button className="btn-primary w-full sm:w-auto">خرید مستقیم</button>
+            <button className="btn-secondary inline-flex items-center justify-center gap-2 w-full sm:w-auto"><Heart size={16} /> افزودن به علاقه مندی ها</button>
+            <button className="btn-secondary inline-flex items-center justify-center gap-2 w-full sm:w-auto"><Share2 size={16} /> اشتراک گذاری</button>
           </div>
         </section>
       </div>

@@ -85,10 +85,13 @@
 
 html {
   scroll-behavior: smooth;
+  overflow-x: hidden;
 }
 
 body {
   @apply bg-dark-bg text-dark-text;
+  max-width: 100%;
+  overflow-x: hidden;
   background-image: radial-gradient(
     circle at 30% 50%,
     rgba(251, 191, 36, 0.05) 0%,
@@ -100,6 +103,24 @@ body {
     transparent 50%
   );
   background-attachment: fixed;
+}
+
+img,
+video,
+canvas,
+svg {
+  max-width: 100%;
+}
+
+p,
+h1,
+h2,
+h3,
+h4,
+h5,
+h6,
+span {
+  overflow-wrap: anywhere;
 }
 
 /* Scrollbar styling */
@@ -270,4 +291,144 @@ html[dir="rtl"] ::-webkit-scrollbar {
   background-image: url('https://www.transparenttextures.com/patterns/carbon-fibre.png');
   background-size: 20px 20px;
   opacity: 0.2;
+}
+
+/* Enhanced Game Cards Animations */
+@keyframes card-pop {
+  0% {
+    transform: scale(0.95);
+    opacity: 0;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+.animate-card-pop {
+  animation: card-pop 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+/* Glow Effects for Game Elements */
+@keyframes glow-pulse {
+  0%, 100% {
+    box-shadow: 0 0 10px rgba(251, 191, 36, 0.3), 0 0 20px rgba(251, 191, 36, 0.1);
+  }
+  50% {
+    box-shadow: 0 0 15px rgba(251, 191, 36, 0.5), 0 0 30px rgba(251, 191, 36, 0.2);
+  }
+}
+
+.animate-glow-pulse {
+  animation: glow-pulse 2s ease-in-out infinite;
+}
+
+/* Slide Game Specific Animations */
+@keyframes slide-number {
+  0%, 100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.05);
+  }
+}
+
+.animate-slide-number {
+  animation: slide-number 0.6s ease-in-out;
+}
+
+/* Progress Bar Animation */
+@keyframes fill-bar {
+  0% {
+    width: 0%;
+  }
+  100% {
+    width: 100%;
+  }
+}
+
+.animate-fill-bar {
+  animation: fill-bar 0.8s ease-out;
+}
+
+/* Room Card Hover Effect */
+.room-card {
+  @apply transition-all duration-300;
+}
+
+.room-card:hover {
+  @apply transform hover:translate-y-[-4px] hover:shadow-2xl;
+}
+
+/* Result Card Animations */
+@keyframes result-shine {
+  0% {
+    background-position: -1000px 0;
+  }
+  100% {
+    background-position: 1000px 0;
+  }
+}
+
+.animate-result-shine {
+  background-size: 1000px 100%;
+  animation: result-shine 3s infinite;
+}
+
+/* Mobile Optimizations */
+@media (max-width: 640px) {
+  body {
+    font-size: 14px;
+  }
+
+  h1 {
+    font-size: 1.75rem;
+  }
+
+  h2 {
+    font-size: 1.5rem;
+  }
+
+  h3 {
+    font-size: 1.25rem;
+  }
+}
+
+/* Tablet Optimizations */
+@media (min-width: 641px) and (max-width: 1024px) {
+  body {
+    font-size: 15px;
+  }
+}
+
+/* Touch Device Optimizations */
+@media (hover: none) and (pointer: coarse) {
+  button {
+    @apply py-4 px-6;
+  }
+
+  .btn-primary,
+  .btn-secondary {
+    @apply rounded-xl;
+  }
+}
+
+/* Support for RTL - better handling */
+html[dir="rtl"] {
+  direction: rtl;
+}
+
+html[dir="rtl"] body {
+  direction: rtl;
+}
+
+/* Enhanced Accessibility */
+@media (prefers-contrast: more) {
+  .btn-primary {
+    @apply shadow-2xl shadow-accent-gold/40;
+  }
+
+  .text-gradient {
+    @apply text-accent-gold;
+  }
 }

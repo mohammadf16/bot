@@ -21,6 +21,19 @@ export function Header() {
     return () => window.removeEventListener("scroll", handleScroll)
   }, [])
 
+  useEffect(() => {
+    setIsMenuOpen(false)
+  }, [pathname])
+
+  useEffect(() => {
+    if (!isMenuOpen) return
+    const previousOverflow = document.body.style.overflow
+    document.body.style.overflow = "hidden"
+    return () => {
+      document.body.style.overflow = previousOverflow
+    }
+  }, [isMenuOpen])
+
   if (isDashboard) return null
 
   const menuItems = [
@@ -30,7 +43,7 @@ export function Header() {
     { label: "کمپین ها", href: "/engagement" },
     { label: "گردونه شانس", href: "/wheel" },
     { label: "ماشین اسلاید", href: "/slide-game" },
-    { label: "بازی اسلاید", href: "/slide-arena" },
+    { label: "اسلاید آرنا", href: "/slide-arena" },
     { label: "مزایده ها", href: "/auction" },
     { label: "درباره ما", href: "/about" },
   ]
@@ -38,16 +51,16 @@ export function Header() {
   return (
     <header
       className={`fixed top-0 left-0 right-0 z-[100] transition-all duration-500 ${
-        scrolled ? "bg-black/80 backdrop-blur-xl border-b border-white/5 py-3" : "bg-transparent py-6"
+        scrolled ? "bg-black/75 backdrop-blur-md border-b border-white/5 py-3" : "bg-transparent py-6"
       }`}
     >
-      <nav className="max-w-[1800px] mx-auto px-6 md:px-12 flex items-center justify-between">
-        <div className="hidden lg:flex items-center gap-8 flex-1">
+      <nav className="max-w-[1800px] mx-auto px-4 sm:px-6 md:px-12 flex items-center justify-between gap-2">
+        <div className="hidden lg:flex items-center gap-4 xl:gap-6 flex-1 min-w-0 overflow-x-auto scrollbar-hide">
           {menuItems.map((item) => (
             <Link
               key={item.href}
               href={item.href}
-              className={`text-sm font-medium tracking-widest uppercase transition-all duration-300 hover:text-[#D4AF37] ${
+              className={`text-xs xl:text-sm font-medium tracking-wide whitespace-nowrap transition-all duration-300 hover:text-[#D4AF37] ${
                 pathname === item.href ? "text-[#D4AF37]" : "text-white/70"
               }`}
             >
@@ -57,13 +70,13 @@ export function Header() {
         </div>
 
         <Link href="/" className="flex flex-col items-center group relative">
-          <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} className="text-3xl md:text-4xl font-black tracking-[0.2em] text-white">
+          <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} className="text-2xl sm:text-3xl md:text-4xl font-black tracking-[0.18em] text-white">
             LUX<span className="text-[#D4AF37]">.</span>
           </motion.div>
           <div className="h-[1px] w-0 group-hover:w-full bg-[#D4AF37] transition-all duration-500 absolute -bottom-1" />
         </Link>
 
-        <div className="flex items-center justify-end gap-4 md:gap-8 flex-1">
+        <div className="flex items-center justify-end gap-2 sm:gap-4 md:gap-8 flex-1">
           <Link href={isAuthenticated ? (user?.role === "admin" ? "/admin/dashboard" : "/dashboard") : "/login"} className="flex items-center gap-2 group">
             <span className="hidden md:block text-[10px] font-bold tracking-[0.2em] uppercase text-white/40 group-hover:text-[#D4AF37] transition-colors">
               {isAuthenticated ? "حساب کاربری" : "ورود / ثبت نام"}
@@ -105,8 +118,8 @@ export function Header() {
             transition={{ type: "spring", damping: 25, stiffness: 200 }}
             className="fixed inset-0 z-[110] bg-black lg:hidden"
           >
-            <div className="flex flex-col h-full p-8">
-              <div className="flex justify-between items-center mb-16">
+            <div className="flex flex-col h-full p-5 sm:p-8">
+              <div className="flex justify-between items-center mb-10 sm:mb-16">
                 <div className="text-2xl font-black tracking-widest">
                   LUX<span className="text-[#D4AF37]">.</span>
                 </div>
@@ -115,10 +128,18 @@ export function Header() {
                 </button>
               </div>
 
-              <div className="flex flex-col gap-6">
+              <div className="flex-1 min-h-0 overflow-y-auto flex flex-col gap-3">
                 {menuItems.map((item, i) => (
                   <motion.div key={item.href} initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: i * 0.1 }}>
-                    <Link href={item.href} onClick={() => setIsMenuOpen(false)} className="text-4xl font-bold hover:text-[#D4AF37] transition-colors">
+                    <Link
+                      href={item.href}
+                      onClick={() => setIsMenuOpen(false)}
+                      className={`block w-full rounded-2xl border px-4 py-3.5 text-lg sm:text-xl leading-tight font-bold transition-all ${
+                        pathname === item.href
+                          ? "bg-[#D4AF37]/12 border-[#D4AF37]/45 text-[#D4AF37]"
+                          : "bg-white/[0.03] border-white/10 text-white/90 hover:border-[#D4AF37]/30 hover:text-[#D4AF37]"
+                      }`}
+                    >
                       {item.label}
                     </Link>
                   </motion.div>

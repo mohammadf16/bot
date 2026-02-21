@@ -9,7 +9,7 @@ import { useAuth } from "@/lib/auth-context"
 
 export default function RegisterPage() {
   const router = useRouter()
-  const { register } = useAuth()
+  const { register, isAuthenticated, isLoading } = useAuth()
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [referralCode, setReferralCode] = useState("")
@@ -22,13 +22,19 @@ export default function RegisterPage() {
     }
   }, [])
 
+  useEffect(() => {
+    if (!isLoading && isAuthenticated) {
+      router.replace("/")
+    }
+  }, [isAuthenticated, isLoading, router])
+
   async function onSubmit(e: FormEvent) {
     e.preventDefault()
     setLoading(true)
     try {
       await register({ email, password, referralCode: referralCode || undefined })
       toast.success("ثبت نام انجام شد. حالا وارد شوید.")
-      router.push("/login")
+      router.replace("/")
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "خطا در ثبت نام")
     } finally {

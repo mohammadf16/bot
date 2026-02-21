@@ -43,10 +43,10 @@ export default function CarsPage() {
   }
 
   return (
-    <main className="min-h-screen pt-28 pb-16" dir="rtl">
+    <main className="min-h-screen pt-24 md:pt-28 pb-16" dir="rtl">
       <div className="max-w-6xl mx-auto px-4 space-y-6">
-        <section className="card glass p-8">
-          <h1 className="text-4xl font-black mb-2">نمایشگاه خودرو (Showroom)</h1>
+        <section className="card glass p-5 md:p-8">
+          <h1 className="text-2xl md:text-4xl font-black mb-2">نمایشگاه خودرو (Showroom)</h1>
           <p className="text-white/70">خرید با تومان یا طلای آب شده؛ خودروهای برد شده دوباره در نمایشگاه قابل خرید هستند.</p>
         </section>
 
@@ -55,15 +55,17 @@ export default function CarsPage() {
             const title = String(v.vehicle["title"] ?? `خودرو ${v.id}`)
             const imageUrl = String(v.vehicle["imageUrl"] ?? "https://images.unsplash.com/photo-1503376780353-7e6692767b70?q=80&w=1200")
             return (
-              <div key={v.id} className="card glass p-5 space-y-3">
-                <img src={imageUrl} alt={title} className="w-full h-48 object-cover rounded-xl" />
-                <h3 className="text-2xl font-black">{title}</h3>
+              <div key={v.id} className="card glass p-4 md:p-5 space-y-3">
+                <div className="w-full h-52 md:h-48 rounded-xl bg-black/35 border border-white/10 overflow-hidden">
+                  <img src={imageUrl} alt={title} className="w-full h-full object-contain md:object-cover" />
+                </div>
+                <h3 className="text-xl md:text-2xl font-black">{title}</h3>
                 <p className="text-sm text-white/60">نوع منبع: {v.sourceType === "lottery_winback" ? "بازخرید از برنده" : "خرید مستقیم سایت"}</p>
                 <p className="text-sm">قیمت تومان: {v.listedPriceIrr?.toLocaleString("fa-IR") ?? "-"}</p>
                 <p className="text-sm">قیمت سوت: {v.listedPriceGoldSot?.toLocaleString("fa-IR") ?? "-"}</p>
-                <div className="flex gap-2">
-                  <button disabled={!v.listedPriceIrr} onClick={() => buy(v.id, "IRR")} className="btn-primary disabled:opacity-60">خرید با تومان</button>
-                  <button disabled={!v.listedPriceGoldSot} onClick={() => buy(v.id, "GOLD_SOT")} className="btn-secondary disabled:opacity-60">خرید با سوت</button>
+                <div className="flex flex-col sm:flex-row gap-2">
+                  <button disabled={!v.listedPriceIrr} onClick={() => buy(v.id, "IRR")} className="btn-primary disabled:opacity-60 w-full sm:w-auto">خرید با تومان</button>
+                  <button disabled={!v.listedPriceGoldSot} onClick={() => buy(v.id, "GOLD_SOT")} className="btn-secondary disabled:opacity-60 w-full sm:w-auto">خرید با سوت</button>
                 </div>
               </div>
             )

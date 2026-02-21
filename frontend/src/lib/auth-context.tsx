@@ -2,6 +2,7 @@
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react"
 import { apiRequest, clearAuthTokens, setAuthTokens } from "./api"
+import { setMockAuthUser } from "./mock-api"
 
 type AuthUser = {
   id: string
@@ -55,8 +56,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [isLoading, setIsLoading] = useState(true)
 
   const refreshMe = useCallback(async () => {
-    const me = await fetchMe()
-    setUser(me)
+    try {
+      const me = await fetchMe()
+      setUser(me)
+    } catch {
+      setUser(null)
+    }
   }, [])
 
   useEffect(() => {
@@ -90,6 +95,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       { auth: false },
     )
     setAuthTokens({ accessToken: data.accessToken, refreshToken: data.refreshToken })
+    setMockAuthUser(data.user)
     setUser(data.user)
     return data.user
   }, [])
@@ -107,17 +113,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const logout = useCallback(async () => {
     try {
-      const refreshToken = typeof window !== "undefined" ? localStorage.getItem("car_refresh_token") : null
-      if (refreshToken) {
-        await apiRequest("/auth/logout", {
-          method: "POST",
-          body: JSON.stringify({ refreshToken }),
-        })
-      }
+      await apiRequest("/auth/logout", {
+        method: "POST",
+        body: JSON.stringify({}),
+      })
     } catch {
       // noop
     } finally {
       clearAuthTokens()
+      setMockAuthUser(null)
       setUser(null)
     }
   }, [])

@@ -6,8 +6,8 @@ import Link from "next/link"
 export function Footer() {
   return (
     <footer className="bg-dark-bg border-t border-white/5 pt-20 pb-10">
-      <div className="max-w-7xl mx-auto px-4">
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-12 mb-16">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8 lg:gap-12 mb-16">
           {/* Company Info */}
           <div className="space-y-6">
             <Link href="/" className="flex items-center gap-3 font-black text-2xl tracking-tighter">
@@ -99,11 +99,11 @@ export function Footer() {
         </div>
 
         {/* Bottom Bar */}
-        <div className="pt-8 border-t border-white/5 flex flex-col md:flex-row justify-between items-center gap-6">
-          <p className="text-dark-text/40 text-xs">
+        <div className="pt-8 border-t border-white/5 flex flex-col md:flex-row justify-between items-center gap-4 md:gap-6">
+          <p className="text-dark-text/40 text-xs text-center md:text-right">
             © ۲۰۲۶ تمام حقوق این پلتفرم متعلق به شرکت کاررافل می‌باشد.
           </p>
-          <div className="flex gap-6">
+          <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-2">
             <Link href="/privacy" className="text-dark-text/40 hover:text-white text-xs transition-colors">حریم خصوصی</Link>
             <Link href="/terms" className="text-dark-text/40 hover:text-white text-xs transition-colors">قوانین و مقررات</Link>
             <Link href="/sitemap" className="text-dark-text/40 hover:text-white text-xs transition-colors">نقشه سایت</Link>

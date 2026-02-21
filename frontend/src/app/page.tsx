@@ -22,18 +22,57 @@ const HERO_SLIDES = [
   {
     image: withBasePath("/photo/3.jpg"),
     title: "شانس واقعی با شفافیت واقعی",
-    subtitle: "گردونه شانس، ماشین اسلاید و قرعه کشی با قوانین شفاف و قابل پیگیری.",
+    subtitle: "گردونه شانس، ماشین اسلاید و اسلاید آرنا با قوانین شفاف و قابل پیگیری.",
   },
 ]
 
-const GlobalStyles = () => (
+const MOBILE_QUICK_LINKS = [
+  { label: "فروشگاه خودرو", href: "/cars" },
+  { label: "قرعه کشی ها", href: "/raffles" },
+  { label: "گردونه شانس", href: "/wheel" },
+  { label: "ماشین اسلاید", href: "/slide-game" },
+  { label: "اسلاید آرنا", href: "/slide-arena" },
+  { label: "مزایده خودرو", href: "/auction" },
+]
+
+const MOBILE_CAR_SCENES = [
+  {
+    image: withBasePath("/photo/auto.png"),
+    title: "ویترین خودروهای روز",
+    subtitle: "مدل ها را یکجا ببین، مقایسه کن و مستقیم وارد صفحه خرید شو.",
+    href: "/cars",
+    cta: "مشاهده خودروها",
+  },
+  {
+    image: withBasePath("/photo/spin.png"),
+    title: "قرعه کشی شفاف",
+    subtitle: "بلیط بخرید، وضعیت فروش را لحظه ای ببینید و نتایج را پیگیری کنید.",
+    href: "/raffles",
+    cta: "ورود به قرعه کشی",
+  },
+  {
+    image: withBasePath("/photo/play.png"),
+    title: "بازی و فرصت های روزانه",
+    subtitle: "گردونه و اسلاید آرنا برای شانس اضافه و امتیاز بیشتر.",
+    href: "/wheel",
+    cta: "شروع بازی",
+  },
+]
+
+const GlobalStyles = ({ isMobile }: { isMobile: boolean }) => (
   <style>{`
+    html {
+      overflow-y: ${isMobile ? "auto" : "hidden"};
+      height: 100%;
+    }
+
     body {
-      overflow: hidden;
+      overflow-y: ${isMobile ? "auto" : "hidden"};
       background-color: #000;
       margin: 0;
       padding: 0;
       color: white;
+      min-height: 100%;
     }
 
     ::-webkit-scrollbar { display: none; }
@@ -79,7 +118,7 @@ const GlassButton = ({
     onClick={onClick}
     type="button"
     className={`
-      relative px-6 py-3 md:px-8 md:py-4 rounded-xl font-bold text-sm md:text-base transition-all duration-300 overflow-hidden group whitespace-nowrap
+      relative px-6 py-3 md:px-8 md:py-4 rounded-xl font-bold text-sm md:text-[15px] transition-all duration-300 overflow-hidden group
       ${
         primary
           ? "bg-[#D4AF37] text-black shadow-[0_0_20px_-5px_rgba(212,175,55,0.4)] hover:shadow-[0_0_30px_-5px_rgba(212,175,55,0.6)]"
@@ -94,7 +133,7 @@ const GlassButton = ({
 )
 
 const SectionWrapper = ({ children, className = "", fullWidth = false }: { children: React.ReactNode; className?: string; fullWidth?: boolean }) => (
-  <section className={`h-screen w-full relative flex items-center justify-center overflow-hidden ${className}`}>
+  <section className={`min-h-[100svh] lg:h-screen w-full relative flex items-center justify-center overflow-x-hidden py-16 lg:py-0 ${className}`}>
     <div className={`w-full h-full relative z-10 flex flex-col justify-center ${fullWidth ? "" : "max-w-[1400px] px-4 md:px-12"}`}>{children}</div>
   </section>
 )
@@ -125,8 +164,8 @@ const HeroSection = ({ onNext }: { onNext: () => void }) => {
         <div className="absolute inset-0 bg-gradient-to-l from-[#050505]/90 via-[#050505]/62 to-[#050505]/20 z-10" />
       </div>
 
-      <div className="relative z-20 h-full w-full max-w-[1400px] mx-auto px-4 md:px-12">
-        <div className="absolute right-4 md:right-12 top-1/2 -translate-y-1/2 w-[min(92vw,650px)] rounded-3xl border border-white/15 bg-black/35 backdrop-blur-md p-6 md:p-10 text-right shadow-2xl">
+      <div className="relative z-20 h-full w-full max-w-[1400px] mx-auto px-4 md:px-12 flex items-end lg:items-center justify-center lg:justify-end pb-14 lg:pb-0">
+        <div className="w-full lg:absolute lg:right-12 lg:top-1/2 lg:-translate-y-1/2 max-w-[650px] rounded-3xl border border-white/15 bg-black/35 backdrop-blur-md p-5 md:p-10 text-right shadow-2xl">
           <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-[#D4AF37]/30 bg-black/45 mb-5">
             <span className="w-2 h-2 rounded-full bg-[#D4AF37] animate-pulse" />
             <span className="text-[#D4AF37] text-[10px] md:text-xs font-bold tracking-widest uppercase">پلتفرم فروش خودرو + قرعه کشی</span>
@@ -136,7 +175,7 @@ const HeroSection = ({ onNext }: { onNext: () => void }) => {
             key={`title-${activeSlide}`}
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
-            className="text-3xl sm:text-5xl md:text-6xl font-black text-white leading-[1.08] tracking-tight min-h-[88px] md:min-h-[140px]"
+            className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-black text-white leading-[1.18] sm:leading-[1.1] tracking-tight min-h-[90px] md:min-h-[140px]"
           >
             {HERO_SLIDES[activeSlide].title}
           </motion.h1>
@@ -145,7 +184,7 @@ const HeroSection = ({ onNext }: { onNext: () => void }) => {
             key={`subtitle-${activeSlide}`}
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
-            className="mt-3 text-sm md:text-lg text-white/80 leading-8 min-h-[56px] md:min-h-[64px]"
+            className="mt-3 text-[15px] md:text-lg text-white/80 leading-7 md:leading-8 min-h-[56px] md:min-h-[64px]"
           >
             {HERO_SLIDES[activeSlide].subtitle}
           </motion.p>
@@ -172,7 +211,7 @@ const HeroSection = ({ onNext }: { onNext: () => void }) => {
         </div>
       </div>
 
-      <motion.div className="absolute bottom-6 md:bottom-10 z-20 flex flex-col items-center gap-2 text-[#D4AF37]/50" animate={{ y: [0, 10, 0] }} transition={{ duration: 2, repeat: Infinity }}>
+      <motion.div className="absolute bottom-6 md:bottom-10 z-20 hidden lg:flex flex-col items-center gap-2 text-[#D4AF37]/50" animate={{ y: [0, 10, 0] }} transition={{ duration: 2, repeat: Infinity }}>
         <span className="text-[10px] uppercase tracking-[0.3em]">Scroll</span>
         <ChevronDown />
       </motion.div>
@@ -199,8 +238,8 @@ const WheelPreviewSection = () => (
         </motion.div>
       </div>
       <div className="space-y-6 text-right order-1 lg:order-2">
-        <h2 className="text-4xl md:text-7xl font-black">گردونه <span className="text-[#D4AF37]">شانس</span></h2>
-        <p className="text-white/60 text-lg leading-relaxed">هر ۲ شانس = ۱ چرخش. جوایز نقدی، شانس اضافه و کش بک آنی.</p>
+        <h2 className="text-3xl md:text-5xl lg:text-6xl font-black">گردونه <span className="text-[#D4AF37]">شانس</span></h2>
+        <p className="text-white/70 text-[15px] md:text-lg leading-relaxed">هر ۲ شانس = ۱ چرخش. جوایز نقدی، شانس اضافه و کش بک آنی.</p>
         <div className="flex gap-4 justify-end">
           <Link href="/wheel"><GlassButton primary className="px-10">چرخاندن گردونه</GlassButton></Link>
         </div>
@@ -213,9 +252,9 @@ const ServiceSection = () => (
   <SectionWrapper>
     <div className="grid lg:grid-cols-2 gap-10 items-center">
       <div className="space-y-6 text-right">
-        <h2 className="text-4xl md:text-7xl font-black">خدمات <span className="text-[#D4AF37]">خودرویی</span></h2>
-        <p className="text-white/60 text-lg leading-relaxed">فروش خودرو، مزایده، وام خودرو و خرید حواله در یک تجربه یکپارچه.</p>
-        <div className="grid grid-cols-2 gap-4">
+        <h2 className="text-3xl md:text-5xl lg:text-6xl font-black">خدمات <span className="text-[#D4AF37]">خودرویی</span></h2>
+        <p className="text-white/70 text-[15px] md:text-lg leading-relaxed">فروش خودرو، مزایده، وام خودرو و خرید حواله در یک تجربه یکپارچه.</p>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <Link href="/cars"><GlassButton className="w-full">فروشگاه خودرو</GlassButton></Link>
           <Link href="/auction"><GlassButton className="w-full">مزایده خودرو</GlassButton></Link>
           <Link href="/loan"><GlassButton className="w-full">وام خودرو</GlassButton></Link>
@@ -224,7 +263,7 @@ const ServiceSection = () => (
       </div>
       <div className="relative">
         <div className="absolute inset-0 bg-[#D4AF37]/10 blur-3xl" />
-        <img src="https://images.unsplash.com/photo-1503376780353-7e6692767b70?q=80&w=1400" alt="cars" className="rounded-3xl border border-white/10" />
+        <img src="https://images.unsplash.com/photo-1503376780353-7e6692767b70?q=80&w=1400" alt="cars" className="rounded-3xl border border-white/10 w-full h-[260px] md:h-auto object-contain md:object-cover bg-black/30" />
       </div>
     </div>
   </SectionWrapper>
@@ -240,7 +279,7 @@ const ActiveRafflesSection = () => {
   return (
     <SectionWrapper>
       <div className="w-full flex flex-col justify-center h-full py-8 md:py-0">
-        <div className="mb-6 md:mb-12 flex justify-between items-end border-b border-white/10 pb-4 md:pb-6 shrink-0">
+        <div className="mb-6 md:mb-12 flex flex-col sm:flex-row gap-3 sm:gap-4 sm:justify-between sm:items-end border-b border-white/10 pb-4 md:pb-6 shrink-0">
           <div>
             <h2 className="text-2xl md:text-4xl font-black mb-1 md:mb-2">قرعه کشی های <span className="text-[#D4AF37]">فعال</span></h2>
             <p className="text-xs md:text-sm text-white/50">بلیط پلکانی، کش بک ۲۰٪، شانس گردونه و جوایز متنوع</p>
@@ -267,7 +306,7 @@ const ActiveRafflesSection = () => {
           {items.map((item, i) => (
             <motion.div key={i} initial={{ y: 50, opacity: 0 }} whileInView={{ y: 0, opacity: 1 }} transition={{ delay: i * 0.1 }} className="group relative bg-white/5 rounded-3xl overflow-hidden border border-white/10 hover:border-[#D4AF37]/50 transition-all duration-300">
               <div className="aspect-video relative overflow-hidden">
-                <img src={item.img} alt={item.name} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700" />
+                <img src={item.img} alt={item.name} className="w-full h-full object-contain md:object-cover bg-black/40 group-hover:scale-110 transition-transform duration-700" />
                 <div className="absolute inset-0 bg-gradient-to-t from-black/80 to-transparent" />
                 <div className="absolute bottom-4 right-4 left-4">
                   <h3 className="font-black text-sm md:text-base mb-1 text-left" dir="ltr">{item.name}</h3>
@@ -298,10 +337,10 @@ const FooterCTA = () => (
       <motion.div initial={{ opacity: 0, scale: 0.9 }} whileInView={{ opacity: 1, scale: 1 }} className="mb-8 p-4 rounded-full bg-[#D4AF37]/10 border border-[#D4AF37]/20">
         <Crown size={48} className="text-[#D4AF37]" />
       </motion.div>
-      <motion.h2 initial={{ y: 20, opacity: 0 }} whileInView={{ y: 0, opacity: 1 }} className="text-5xl md:text-8xl font-black text-white mb-6 md:mb-8 tracking-tighter">
+      <motion.h2 initial={{ y: 20, opacity: 0 }} whileInView={{ y: 0, opacity: 1 }} className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-black text-white mb-6 md:mb-8 tracking-tight">
         عضویت در <span className="text-[#D4AF37]">کلاب</span>
       </motion.h2>
-      <p className="text-base md:text-xl text-white/60 mb-8 md:mb-12 max-w-2xl leading-relaxed">دسترسی زودهنگام به قرعه کشی های VIP، مزایای ویژه، گزارش شفاف نتایج و مدیریت کامل حساب.</p>
+      <p className="text-[15px] md:text-lg text-white/70 mb-8 md:mb-12 max-w-2xl leading-relaxed">دسترسی زودهنگام به قرعه کشی های VIP، مزایای ویژه، گزارش شفاف نتایج و مدیریت کامل حساب.</p>
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 w-full mb-12">
         {[
           { icon: Gift, title: "هدایای ویژه", desc: "جوایز نقدی و کش بک" },
@@ -310,33 +349,169 @@ const FooterCTA = () => (
         ].map((feature, i) => (
           <motion.div key={i} initial={{ y: 20, opacity: 0 }} whileInView={{ y: 0, opacity: 1 }} transition={{ delay: i * 0.1 }} className="p-6 rounded-3xl bg-white/5 border border-white/10 hover:border-[#D4AF37]/30 transition-all group">
             <feature.icon className="text-[#D4AF37] mx-auto mb-4 group-hover:scale-110 transition-transform" size={32} />
-            <h4 className="font-bold text-white mb-2">{feature.title}</h4>
-            <p className="text-xs text-white/40">{feature.desc}</p>
+            <h4 className="font-bold text-base text-white mb-2">{feature.title}</h4>
+            <p className="text-sm text-white/55">{feature.desc}</p>
           </motion.div>
         ))}
       </div>
       <div className="flex flex-col sm:flex-row gap-4 w-full sm:w-auto">
-        <Link href="/dashboard" className="w-full sm:w-auto"><GlassButton primary className="w-full px-12 py-5 text-lg">ورود به پنل</GlassButton></Link>
-        <Link href="/fairness" className="w-full sm:w-auto"><GlassButton className="w-full px-12 py-5 text-lg">شفافیت سیستم</GlassButton></Link>
+        <Link href="/dashboard" className="w-full sm:w-auto"><GlassButton primary className="w-full px-10 py-4 text-base">ورود به پنل</GlassButton></Link>
+        <Link href="/fairness" className="w-full sm:w-auto"><GlassButton className="w-full px-10 py-4 text-base">شفافیت سیستم</GlassButton></Link>
       </div>
     </div>
   </SectionWrapper>
 )
 
+const MobileHomeExperience = () => {
+  const [activeSlide, setActiveSlide] = useState(0)
+
+  useEffect(() => {
+    const id = setInterval(() => setActiveSlide((p) => (p + 1) % HERO_SLIDES.length), 4500)
+    return () => clearInterval(id)
+  }, [])
+
+  return (
+    <div className="relative z-10 w-full">
+      <section className="relative min-h-[100svh] overflow-hidden">
+        <AnimatePresence mode="sync">
+          <motion.img
+            key={`mobile-hero-${HERO_SLIDES[activeSlide].image}`}
+            src={HERO_SLIDES[activeSlide].image}
+            alt={HERO_SLIDES[activeSlide].title}
+            initial={{ opacity: 0, scale: 1.08 }}
+            animate={{ opacity: 1, scale: 1.02 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 1.1 }}
+            className="absolute inset-0 w-full h-full object-cover"
+          />
+        </AnimatePresence>
+        <div className="absolute inset-0 bg-gradient-to-t from-black via-black/65 to-black/25" />
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_75%_15%,rgba(212,175,55,0.18),transparent_42%)]" />
+
+        <div className="relative z-20 min-h-[100svh] px-4 pt-28 pb-10 flex flex-col justify-end">
+          <span className="inline-flex w-fit items-center gap-2 rounded-full border border-[#D4AF37]/40 bg-black/40 px-3 py-1 text-[11px] font-bold text-[#D4AF37]">
+            تجربه خودرو محور
+          </span>
+          <h1 className="mt-4 text-[32px] leading-[1.2] font-black text-white">
+            {HERO_SLIDES[activeSlide].title}
+          </h1>
+          <p className="mt-3 max-w-[32ch] text-[15px] leading-7 text-white/85">
+            {HERO_SLIDES[activeSlide].subtitle}
+          </p>
+
+          <div className="mt-4 flex items-center gap-2">
+            {HERO_SLIDES.map((_, i) => (
+              <button
+                key={`mobile-dot-${i}`}
+                type="button"
+                onClick={() => setActiveSlide(i)}
+                className={`h-2 rounded-full transition-all ${activeSlide === i ? "w-8 bg-[#D4AF37]" : "w-2 bg-white/45"}`}
+              />
+            ))}
+          </div>
+
+          <div className="mt-6 grid grid-cols-2 gap-3">
+            <Link href="/cars">
+              <GlassButton primary className="w-full">ورود به نمایشگاه</GlassButton>
+            </Link>
+            <Link href="/raffles">
+              <GlassButton className="w-full">شروع قرعه کشی</GlassButton>
+            </Link>
+          </div>
+
+          <div className="mt-5 -mx-1 flex gap-2 overflow-x-auto px-1 pb-1 scrollbar-hide">
+            {MOBILE_QUICK_LINKS.map((item) => (
+              <Link
+                key={item.href}
+                href={item.href}
+                className="shrink-0 rounded-full border border-white/20 bg-black/45 px-4 py-2 text-[13px] font-bold text-white/90"
+              >
+                {item.label}
+              </Link>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      <section className="px-4 py-8 space-y-5">
+        {MOBILE_CAR_SCENES.map((scene, index) => (
+          <motion.article
+            key={scene.href}
+            initial={{ y: 40, opacity: 0 }}
+            whileInView={{ y: 0, opacity: 1 }}
+            viewport={{ once: true, amount: 0.25 }}
+            transition={{ delay: index * 0.08, duration: 0.45 }}
+            className="relative min-h-[56svh] overflow-hidden rounded-[28px] border border-white/15"
+          >
+            <img src={scene.image} alt={scene.title} className="absolute inset-0 h-full w-full object-cover" />
+            <div className="absolute inset-0 bg-gradient-to-t from-black via-black/45 to-black/10" />
+            <div className="absolute inset-x-0 bottom-0 p-5">
+              <p className="text-xs font-bold tracking-wide text-[#D4AF37]">بخش کلیدی سایت</p>
+              <h2 className="mt-1 text-[28px] leading-[1.2] font-black text-white">{scene.title}</h2>
+              <p className="mt-2 text-[15px] leading-7 text-white/90">{scene.subtitle}</p>
+              <Link href={scene.href} className="mt-4 inline-flex items-center gap-2 text-[15px] font-bold text-[#D4AF37]">
+                {scene.cta}
+                <ArrowLeft size={16} />
+              </Link>
+            </div>
+          </motion.article>
+        ))}
+      </section>
+
+      <section className="px-4 pb-16">
+        <div className="relative min-h-[38svh] overflow-hidden rounded-[28px] border border-white/15">
+          <img
+            src="https://images.unsplash.com/photo-1542282088-fe8426682b8f?q=80&w=1600"
+            alt="car night drive"
+            className="absolute inset-0 h-full w-full object-cover"
+          />
+          <div className="absolute inset-0 bg-gradient-to-t from-black via-black/60 to-black/25" />
+          <div className="relative z-10 flex min-h-[38svh] flex-col justify-end p-6">
+            <h3 className="text-[28px] leading-[1.2] font-black text-white">کل سایت را ساده و سریع تجربه کن</h3>
+            <p className="mt-2 text-[15px] leading-7 text-white/85">
+              مسیر خرید خودرو، قرعه کشی، بازی و کیف پول از همین صفحه برای موبایل قابل دسترسی است.
+            </p>
+            <div className="mt-5 grid grid-cols-2 gap-3">
+              <Link href="/login">
+                <GlassButton className="w-full">ورود / ثبت نام</GlassButton>
+              </Link>
+              <Link href="/fairness">
+                <GlassButton primary className="w-full">شفافیت سیستم</GlassButton>
+              </Link>
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
+  )
+}
+
 export default function HomePage() {
   const [activeSection, setActiveSection] = useState(0)
   const [mousePos, setMousePos] = useState({ x: 0, y: 0 })
+  const [isMobile, setIsMobile] = useState(false)
   const scrollTimeout = useRef<NodeJS.Timeout | null>(null)
   const sectionsCount = 5
 
   useEffect(() => {
-    const handleMouseMove = (e: MouseEvent) => setMousePos({ x: e.clientX, y: e.clientY })
-    window.addEventListener("mousemove", handleMouseMove)
-    return () => window.removeEventListener("mousemove", handleMouseMove)
+    const media = window.matchMedia("(max-width: 1023px)")
+    const update = () => setIsMobile(media.matches)
+    update()
+    media.addEventListener("change", update)
+    return () => media.removeEventListener("change", update)
   }, [])
 
   useEffect(() => {
+    if (isMobile) return
+    const handleMouseMove = (e: MouseEvent) => setMousePos({ x: e.clientX, y: e.clientY })
+    window.addEventListener("mousemove", handleMouseMove)
+    return () => window.removeEventListener("mousemove", handleMouseMove)
+  }, [isMobile])
+
+  useEffect(() => {
+    if (isMobile) return
     const handleWheel = (e: WheelEvent) => {
+      e.preventDefault()
       if (scrollTimeout.current) return
       if (Math.abs(e.deltaY) > 30) {
         const direction = e.deltaY > 0 ? 1 : -1
@@ -350,24 +525,28 @@ export default function HomePage() {
         }, 900)
       }
     }
-    window.addEventListener("wheel", handleWheel, { passive: true })
+    window.addEventListener("wheel", handleWheel, { passive: false })
     return () => window.removeEventListener("wheel", handleWheel)
-  }, [])
+  }, [isMobile])
 
   return (
-    <div dir="rtl" className="bg-black h-screen w-full overflow-hidden text-white">
-      <GlobalStyles />
+    <div dir="rtl" className={`bg-black w-full text-white ${isMobile ? "min-h-screen overflow-x-hidden" : "h-screen overflow-hidden"}`}>
+      <GlobalStyles isMobile={isMobile} />
       <AmbientLight mouseX={mousePos.x} mouseY={mousePos.y} />
 
-      <motion.div className="w-full h-full" animate={{ y: `-${activeSection * 100}%` }} transition={{ duration: 0.8, ease: [0.6, 0.05, -0.01, 0.9] }}>
-        <div className="h-full w-full"><HeroSection onNext={() => setActiveSection(1)} /></div>
-        <div className="h-full w-full"><WheelPreviewSection /></div>
-        <div className="h-full w-full"><ServiceSection /></div>
-        <div className="h-full w-full"><ActiveRafflesSection /></div>
-        <div className="h-full w-full"><FooterCTA /></div>
-      </motion.div>
+      {isMobile ? (
+        <MobileHomeExperience />
+      ) : (
+        <motion.div className="w-full h-full" animate={{ y: `-${activeSection * 100}%` }} transition={{ duration: 0.8, ease: [0.6, 0.05, -0.01, 0.9] }}>
+          <div className="h-full w-full"><HeroSection onNext={() => setActiveSection(1)} /></div>
+          <div className="h-full w-full"><WheelPreviewSection /></div>
+          <div className="h-full w-full"><ServiceSection /></div>
+          <div className="h-full w-full"><ActiveRafflesSection /></div>
+          <div className="h-full w-full"><FooterCTA /></div>
+        </motion.div>
+      )}
 
-      <div className="fixed right-4 md:right-8 top-1/2 -translate-y-1/2 z-30 flex flex-col gap-3 md:gap-4 hidden md:flex">
+      <div className="fixed right-4 md:right-8 top-1/2 -translate-y-1/2 z-30 flex-col gap-3 md:gap-4 hidden md:flex">
         {[...Array(5)].map((_, i) => (
           <button key={i} onClick={() => setActiveSection(i)} className={`w-1 rounded-full transition-all duration-300 ${activeSection === i ? "h-6 md:h-8 bg-[#D4AF37]" : "h-2 bg-white/20 hover:bg-white/50"}`} />
         ))}

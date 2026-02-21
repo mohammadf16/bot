@@ -52,13 +52,37 @@ export default function SlideGamePage() {
     if (isDrawingRef.current) return
     try {
       const data: { draw: DrawData } = await apiRequest("/slide/draw/current", { method: "GET" }, { auth: false })
-      if (draw && draw.status !== "drawn" && data.draw.status === "drawn") {
+      const incomingDraw = data?.draw
+      if (!incomingDraw) {
+        setDraw(null)
+        setMyEntries(null)
+        return
+      }
+      const normalizedDraw: DrawData = {
+        ...incomingDraw,
+        participants: Array.isArray(incomingDraw.participants) ? incomingDraw.participants : [],
+        prizes: Array.isArray(incomingDraw.prizes) ? incomingDraw.prizes : [],
+        totalEntries: typeof incomingDraw.totalEntries === "number" ? incomingDraw.totalEntries : 0,
+        winningLogs: Array.isArray(incomingDraw.winningLogs) ? incomingDraw.winningLogs : [],
+        winners: Array.isArray(incomingDraw.winners) ? incomingDraw.winners : [],
+      }
+      if (draw && draw.status !== "drawn" && normalizedDraw.status === "drawn") {
         isDrawingRef.current = true
         setTimeout(() => { isDrawingRef.current = false }, 8000)
       }
-      setDraw(data.draw)
-      if (user && data.draw?.id) {
-        try { setMyEntries(await apiRequest<MyEntriesData>("/slide/draw/current/me", { method: "GET" })) } catch { setMyEntries(null) }
+      setDraw(normalizedDraw)
+      if (user && normalizedDraw.id) {
+        try {
+          const me = await apiRequest<MyEntriesData>("/slide/draw/current/me", { method: "GET" })
+          setMyEntries({
+            ...me,
+            myEntryNumbers: Array.isArray(me.myEntryNumbers) ? me.myEntryNumbers : [],
+            myEntriesCount: typeof me.myEntriesCount === "number" ? me.myEntriesCount : 0,
+            availableChances: typeof me.availableChances === "number" ? me.availableChances : 0,
+          })
+        } catch {
+          setMyEntries(null)
+        }
       } else setMyEntries(null)
     } finally {
       setLoading(false)
@@ -110,6 +134,7 @@ export default function SlideGamePage() {
     const percent = 100 - (Math.min(maxSeconds, countdownState.totalSeconds) / maxSeconds) * 100
     return { percent, color: countdownState.urgency.color, isCritical: countdownState.urgency.level === "critical" }
   }, [countdownState])
+  const mySortedNumbers = useMemo(() => [...(myEntries?.myEntryNumbers ?? [])].sort((a, b) => a - b), [myEntries?.myEntryNumbers])
 
   if (loading) return <LoadingScreen />
 
@@ -139,7 +164,22 @@ export default function SlideGamePage() {
                       <div><label className="text-[11px] text-white/50 mb-1 block">تعداد شانس برای این قرعه</label><input type="number" min={1} value={chancesToUse} onChange={(e) => setChancesToUse(Math.max(1, Number(e.target.value || 1)))} className="w-full rounded-xl bg-black/30 border border-white/15 px-3 py-2 text-sm outline-none focus:border-cyan-400" /></div>
                       <button onClick={() => void submitChances()} disabled={isSubmitting} className="h-[42px] rounded-xl bg-cyan-500/80 hover:bg-cyan-400 text-black font-black text-sm disabled:opacity-60">{isSubmitting ? "در حال ثبت..." : "ثبت شانس و دریافت شماره یونیک"}</button>
                     </div>
-                    <div className="mt-3 text-xs text-white/65">شماره های ثبت شده شما: <span className="text-cyan-300 font-bold">{(myEntries?.myEntriesCount ?? 0).toLocaleString("fa-IR")} عدد</span></div>
+                    <div className="mt-3 text-xs text-white/65">تعداد شماره های ثبت شده شما: <span className="text-cyan-300 font-bold">{(myEntries?.myEntriesCount ?? 0).toLocaleString("fa-IR")} عدد</span></div>
+                    <div className="mt-2 text-[11px] text-white/45">این شماره‌ها فقط برای شما نمایش داده می‌شوند.</div>
+                    <div className="mt-3 rounded-2xl border border-white/10 bg-black/30 p-3">
+                      <p className="text-[11px] text-white/60 mb-2">شماره های شانس من</p>
+                      {mySortedNumbers.length ? (
+                        <div className="max-h-24 overflow-y-auto custom-scrollbar flex flex-wrap gap-1.5">
+                          {mySortedNumbers.map((n) => (
+                            <span key={n} className="font-mono text-[11px] px-2 py-1 rounded-lg bg-cyan-500/10 border border-cyan-500/30 text-cyan-300">
+                              {n.toLocaleString("fa-IR")}
+                            </span>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="text-xs text-white/50">هنوز شماره‌ای ثبت نشده است.</p>
+                      )}
+                    </div>
                   </div>
                 )}
 
@@ -171,9 +211,9 @@ export default function SlideGamePage() {
                 )}
 
                 <div className="grid grid-cols-2 md:grid-cols-5 gap-4 w-full max-w-5xl mt-16 border-t border-white/5 pt-8 relative z-10">
-                  <MetricCard icon={<Users size={20} />} label="شرکت‌کننده" value={draw.participants.length.toLocaleString("fa-IR")} />
+                  <MetricCard icon={<Users size={20} />} label="شرکت‌کننده" value={(draw.participants?.length ?? 0).toLocaleString("fa-IR")} />
                   <MetricCard icon={<Sparkles size={20} />} label="شماره ثبت شده" value={(draw.totalEntries ?? 0).toLocaleString("fa-IR")} />
-                  <MetricCard icon={<Zap size={20} />} label="شانس کل" value={draw.participants.reduce((a, b) => a + b.chances, 0).toLocaleString("fa-IR")} />
+                  <MetricCard icon={<Zap size={20} />} label="شانس کل" value={(draw.participants ?? []).reduce((a, b) => a + b.chances, 0).toLocaleString("fa-IR")} />
                   <MetricCard icon={<ShieldCheck size={20} />} label="Secure Check" value="SHA-512" />
                   <MetricCard icon={<Activity size={20} />} label="Network" value="Stable" color="text-emerald-500" />
                 </div>
@@ -181,8 +221,8 @@ export default function SlideGamePage() {
             </motion.div>
 
             <div className="grid grid-cols-12 gap-6 md:gap-8 relative z-10">
-              <ParticipantsList participants={draw.participants} />
-              <PrizesList status={draw.status} prizes={draw.prizes} winners={draw.winners} />
+              <ParticipantsList participants={draw.participants ?? []} />
+              <PrizesList status={draw.status} prizes={draw.prizes ?? []} winners={draw.winners ?? []} />
             </div>
 
             {draw.winningLogs?.length && (
@@ -213,7 +253,7 @@ function BackgroundStageLight({ status, urgencyLevel }: { status: string; urgenc
 function StatusBadge({ status, urgency }: { status: string; urgency?: UrgencyLevel }) { const isLive = status === "scheduled"; const colorClass = isLive ? (urgency === "critical" ? "bg-red-500" : urgency === "warning" ? "bg-amber-500" : "bg-emerald-500") : "bg-amber-600"; const text = isLive ? (urgency === "critical" ? "لحظات پایانی" : "پخش زنده") : status === "processing" ? "در حال قرعه‌کشی" : "پایان یافته"; return <div className="flex items-center gap-3 mb-10 bg-white/5 px-5 py-2 rounded-full border border-white/5 backdrop-blur-md relative z-10"><span className="relative flex h-3 w-3">{isLive && <span className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${colorClass}`} />}<span className={`relative inline-flex rounded-full h-3 w-3 ${colorClass}`} /></span><span className="text-xs font-black uppercase tracking-widest text-white/70">{text}</span></div> }
 function ProcessingState() { return <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} className="flex flex-col items-center gap-6 py-10"><div className="relative w-28 h-28"><div className="absolute inset-0 border-4 border-amber-500/20 rounded-full animate-ping" /><div className="absolute inset-0 border-4 border-amber-500 border-t-transparent rounded-full animate-spin" /><Cpu className="absolute inset-0 m-auto text-amber-500 animate-pulse" size={40} /></div><div className="text-center"><h3 className="text-3xl font-black text-amber-500 mb-2 animate-pulse">در حال استخراج برنده...</h3><p className="text-white/50 font-mono text-sm tracking-wider">Verifying Blockchain Integrity</p></div></motion.div> }
 function ResultReveal({ targetNumber }: { targetNumber: number }) { const springValue = useSpring(0, { stiffness: 60, damping: 12 }); const displayValue = useTransform(springValue, (current) => Math.round(current)); useEffect(() => { springValue.set(targetNumber) }, [targetNumber, springValue]); return <motion.div initial={{ opacity: 0, scale: 0.5 }} animate={{ opacity: 1, scale: 1 }} className="flex flex-col items-center"><motion.div className="text-[12px] text-amber-400 font-black uppercase tracking-[0.5em] mb-6 animate-pulse">Winning Number</motion.div><div className="relative px-16 py-8 bg-gradient-to-b from-amber-500/20 to-transparent border-2 border-amber-500/30 rounded-[3rem] overflow-hidden"><motion.div className="text-8xl md:text-[10rem] font-black font-mono tracking-widest text-white"><motion.span>{displayValue}</motion.span></motion.div></div><motion.div className="mt-10 flex items-center gap-2 text-emerald-400 bg-emerald-500/10 px-8 py-3 rounded-full border border-emerald-500/20"><Sparkles size={20} /><span className="text-base font-bold">تایید شده توسط بلاکچین</span></motion.div></motion.div> }
-function ParticipantsList({ participants }: { participants: Participant[] }) { return <div className="col-span-12 lg:col-span-7"><div className="bg-white/[0.02] border border-white/5 rounded-[3rem] p-8 md:p-10 h-[600px] flex flex-col relative overflow-hidden backdrop-blur-sm"><div className="flex items-center justify-between mb-8"><h3 className="text-2xl font-black flex items-center gap-4"><div className="p-3 bg-cyan-500/10 rounded-2xl text-cyan-500"><Users size={24} /></div>تابلوی شانس</h3></div><div className="flex-1 overflow-y-auto pr-4 custom-scrollbar space-y-3">{participants.map((p, idx) => <div key={p.userId} className="p-4 bg-white/[0.03] border border-white/5 rounded-3xl flex items-center justify-between"><div className="flex items-center gap-4"><div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-white/10 to-white/5 flex items-center justify-center font-black text-white/30 text-lg">{idx + 1}</div><div><p className="font-bold text-lg text-white">{p.fullName}</p><p className="text-[10px] text-white/30">{p.email.split("@")[0]}***</p></div></div><div className="text-right"><p className="text-lg font-black">{p.chances.toLocaleString("fa-IR")}</p></div></div>)}</div></div></div> }
+function ParticipantsList({ participants }: { participants: Participant[] }) { return <div className="col-span-12 lg:col-span-7"><div className="bg-white/[0.02] border border-white/5 rounded-[3rem] p-8 md:p-10 h-[600px] flex flex-col relative overflow-hidden backdrop-blur-sm"><div className="flex items-center justify-between mb-8"><h3 className="text-2xl font-black flex items-center gap-4"><div className="p-3 bg-cyan-500/10 rounded-2xl text-cyan-500"><Users size={24} /></div>تابلوی شانس</h3></div><div className="flex-1 overflow-y-auto pr-4 custom-scrollbar space-y-3">{participants.map((p, idx) => <div key={p.userId} className="p-4 bg-white/[0.03] border border-white/5 rounded-3xl flex items-center justify-between"><div className="flex items-center gap-4"><div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-white/10 to-white/5 flex items-center justify-center font-black text-white/30 text-lg">{idx + 1}</div><div><p className="font-bold text-lg text-white">{p.fullName}</p><p className="text-[10px] text-white/30">{p.email.split("@")[0]}***</p></div></div><div className="text-right"><p className="text-[10px] text-white/45 mb-1">تعداد شانس</p><p className="text-lg font-black">{p.chances.toLocaleString("fa-IR")}</p></div></div>)}</div></div></div> }
 function PrizesList({ status, prizes, winners }: { status: string; prizes: Prize[]; winners?: Winner[] }) { return <div className="col-span-12 lg:col-span-5"><div className="bg-gradient-to-b from-amber-500/[0.05] to-transparent border border-amber-500/10 rounded-[3rem] p-8 md:p-10 h-full relative overflow-hidden backdrop-blur-sm"><div className="flex items-center gap-4 mb-10"><div className="p-3 bg-amber-500/10 rounded-2xl text-amber-500 border border-amber-500/10"><Trophy size={24} /></div><div><h3 className="text-2xl font-black text-white">جوایز رویداد</h3></div></div><div className="space-y-4">{status === "drawn" && winners ? winners.map((w) => <div key={w.rank} className="p-5 bg-gradient-to-r from-amber-500/20 to-black/40 border border-amber-500/40 rounded-3xl"><p className="font-bold text-lg text-white">{w.fullName}</p><p className="text-xs text-amber-200">{w.prize.title}{w.prize.amount ? ` - ${formatToman(w.prize.amount)}` : ""}</p></div>) : prizes.map((p, i) => <div key={i} className="p-5 bg-white/[0.03] border border-white/5 rounded-3xl flex items-center justify-between"><span className="text-sm font-bold text-white/80">{p.title}</span>{p.amount && <span className="text-sm font-black text-amber-500">{formatToman(p.amount)}</span>}</div>)}</div></div></div> }
 function MetricCard({ icon, label, value, color = "text-white" }: { icon: any; label: string; value: string; color?: string }) { return <div className="p-6 rounded-[2.5rem] bg-white/[0.03] border border-white/5 flex flex-col items-center text-center"><div className="text-white/20 mb-3">{icon}</div><p className="text-[9px] font-black text-white/30 uppercase tracking-[0.2em] mb-2">{label}</p><p className={`text-xl md:text-2xl font-black ${color}`}>{value}</p></div> }
 function LoadingScreen() { return <div className="min-h-screen bg-[#020202] flex items-center justify-center"><div className="flex flex-col items-center gap-4"><div className="relative w-20 h-20"><div className="absolute inset-0 border-4 border-cyan-500/20 rounded-full" /><div className="absolute inset-0 border-4 border-cyan-500 border-t-transparent rounded-full animate-spin" /></div><p className="text-cyan-500/50 text-xs font-black tracking-widest uppercase animate-pulse">System Loading</p></div></div> }

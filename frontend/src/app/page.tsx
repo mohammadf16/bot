@@ -31,7 +31,6 @@ const MOBILE_QUICK_LINKS = [
   { label: "قرعه کشی ها", href: "/raffles" },
   { label: "گردونه شانس", href: "/wheel" },
   { label: "ماشین اسلاید", href: "/slide-game" },
-  { label: "اسلاید آرنا", href: "/slide-arena" },
   { label: "مزایده خودرو", href: "/auction" },
 ]
 

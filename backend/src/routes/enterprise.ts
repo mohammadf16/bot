@@ -8,6 +8,8 @@ import { pushUserNotification } from "../services/notifications.js"
 
 const LEGAL_DISCLAIMER_DEFAULT = "این سایت یک پلتفرم سرگرمی است و هیچ سود قطعی به کاربران وعده داده نمی شود."
 const LOAN_MAX_IRR = 5_000_000
+const AUCTION_BID_STEP_IRR = 10_000_000
+const CAR_LOAN_MONTHLY_RATE = 0.015
 const DAILY_STREAK_REWARDS = [1, 2, 3, 4, 5, 6, 10]
 
 type VipSnapshot = {
@@ -58,7 +60,11 @@ const createAuctionSchema = z.object({
 })
 
 const liveBidSchema = z.object({ amount: z.number().int().positive() })
-const showroomOrderSchema = z.object({ paymentAsset: z.enum(["IRR", "GOLD_SOT"]) })
+const showroomOrderSchema = z.object({
+  paymentAsset: z.enum(["IRR", "GOLD_SOT", "LOAN"]),
+  loanMonths: z.number().int().min(6).max(60).optional(),
+  downPaymentIrr: z.number().int().min(0).max(10_000_000_000).optional(),
+})
 const showroomCreateSchema = z.object({
   title: z.string().trim().min(3).max(180),
   imageUrl: z.string().trim().url(),
@@ -149,6 +155,26 @@ function recalcVip(user: {
     user.vipCashbackPercent = 20
   }
   return { id: user.vipLevelId, name: user.vipLevelName, cashbackPercent: user.vipCashbackPercent }
+}
+
+function maskTopBidderName(email?: string, fullName?: string, userId?: string): string {
+  const trimmedName = String(fullName ?? "").trim()
+  if (trimmedName.length >= 3) return trimmedName
+  const local = String(email ?? "").split("@")[0] ?? ""
+  if (local.length >= 3) return `${local.slice(0, 3).toUpperCase()}-PRO`
+  return String(userId ?? "USER")
+}
+
+function buildInstallmentPlan(principalIrr: number, months: number) {
+  const safeMonths = Math.max(6, Math.min(60, Math.trunc(months)))
+  const totalRepayableIrr = Math.round(principalIrr * (1 + CAR_LOAN_MONTHLY_RATE * safeMonths))
+  const monthlyInstallmentIrr = Math.ceil(totalRepayableIrr / safeMonths)
+  return {
+    installmentCount: safeMonths,
+    interestRateMonthlyPercent: CAR_LOAN_MONTHLY_RATE * 100,
+    totalRepayableIrr,
+    monthlyInstallmentIrr,
+  }
 }
 
 function getOrInitWelcome(store: RouteContext["store"], userId: string) {
@@ -562,15 +588,47 @@ export async function registerEnterpriseRoutes(ctx: RouteContext): Promise<void>
     const user = store.users.get(request.user.sub)
     if (!user) return reply.code(404).send({ error: "USER_NOT_FOUND" })
     ensureUserDefaults(user)
-    const amount = parsed.data.paymentAsset === "IRR" ? vehicle.listedPriceIrr : vehicle.listedPriceGoldSot
+    const amount = parsed.data.paymentAsset === "GOLD_SOT" ? vehicle.listedPriceGoldSot : vehicle.listedPriceIrr
     if (!amount || amount <= 0) return reply.code(400).send({ error: "PRICE_NOT_AVAILABLE" })
 
     if (parsed.data.paymentAsset === "IRR") {
       if (user.walletBalance < amount) return reply.code(400).send({ error: "INSUFFICIENT_BALANCE" })
       user.walletBalance -= amount
-    } else {
+    } else if (parsed.data.paymentAsset === "GOLD_SOT") {
       if ((user.goldSotBalance ?? 0) < amount) return reply.code(400).send({ error: "INSUFFICIENT_GOLD" })
       user.goldSotBalance = (user.goldSotBalance ?? 0) - amount
+    } else {
+      const vip = recalcVip(user)
+      if (vip.id < 3) return reply.code(403).send({ error: "PRO_ONLY", requiredLevel: 3 })
+      const cashPrice = vehicle.listedPriceIrr
+      if (!cashPrice || cashPrice <= 0) return reply.code(400).send({ error: "LOAN_REQUIRES_IRR_PRICE" })
+      const minDownPayment = Math.round(cashPrice * 0.2)
+      const downPayment = Math.max(minDownPayment, parsed.data.downPaymentIrr ?? minDownPayment)
+      if (user.walletBalance < downPayment) return reply.code(400).send({ error: "INSUFFICIENT_BALANCE_FOR_DOWN_PAYMENT", minimum: downPayment })
+      user.walletBalance -= downPayment
+      const loanPrincipal = Math.max(0, cashPrice - downPayment)
+      if (loanPrincipal > 0) {
+        const plan = buildInstallmentPlan(loanPrincipal, parsed.data.loanMonths ?? 12)
+        const now = nowIso()
+        const loan = {
+          id: id("loan"),
+          userId: user.id,
+          principalIrr: loanPrincipal,
+          outstandingIrr: plan.totalRepayableIrr,
+          installmentCount: plan.installmentCount,
+          monthlyInstallmentIrr: plan.monthlyInstallmentIrr,
+          interestRateMonthlyPercent: plan.interestRateMonthlyPercent,
+          totalRepayableIrr: plan.totalRepayableIrr,
+          purpose: "vehicle_purchase" as const,
+          relatedVehicleId: vehicle.id,
+          status: "active" as const,
+          restrictedUsage: false,
+          createdAt: now,
+          updatedAt: now,
+          dueAt: new Date(Date.now() + plan.installmentCount * 30 * 24 * 60 * 60 * 1000).toISOString(),
+        }
+        store.autoLoans.set(loan.id, loan)
+      }
     }
 
     user.updatedAt = nowIso()
@@ -578,7 +636,27 @@ export async function registerEnterpriseRoutes(ctx: RouteContext): Promise<void>
     vehicle.status = "sold"
     vehicle.updatedAt = nowIso()
     store.showroomVehicles.set(vehicle.id, vehicle)
-    const order = { id: id("ord"), vehicleId: vehicle.id, buyerUserId: user.id, paymentAsset: parsed.data.paymentAsset, paymentAmount: amount, status: "paid" as const, createdAt: nowIso(), updatedAt: nowIso() }
+    const cashPrice = vehicle.listedPriceIrr ?? amount
+    const downPaymentIrr = parsed.data.paymentAsset === "LOAN" ? Math.max(Math.round(cashPrice * 0.2), parsed.data.downPaymentIrr ?? Math.round(cashPrice * 0.2)) : undefined
+    const loanMonths = parsed.data.paymentAsset === "LOAN" ? Math.max(6, Math.min(60, parsed.data.loanMonths ?? 12)) : undefined
+    const loanAmountIrr = parsed.data.paymentAsset === "LOAN" ? Math.max(0, cashPrice - (downPaymentIrr ?? 0)) : undefined
+    const monthlyInstallmentIrr = parsed.data.paymentAsset === "LOAN" && loanAmountIrr
+      ? buildInstallmentPlan(loanAmountIrr, loanMonths ?? 12).monthlyInstallmentIrr
+      : undefined
+    const order = {
+      id: id("ord"),
+      vehicleId: vehicle.id,
+      buyerUserId: user.id,
+      paymentAsset: parsed.data.paymentAsset,
+      paymentAmount: cashPrice,
+      loanMonths,
+      downPaymentIrr,
+      loanAmountIrr,
+      monthlyInstallmentIrr,
+      status: "paid" as const,
+      createdAt: nowIso(),
+      updatedAt: nowIso(),
+    }
     store.showroomOrders.set(order.id, order)
     pushLiveEvent(store, {
       type: "showroom.order",
@@ -594,7 +672,20 @@ export async function registerEnterpriseRoutes(ctx: RouteContext): Promise<void>
     const items = Array.from(store.auctions.values()).filter((a) => a.status === "open" || a.endAt > now).sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1)).map((a) => {
       const bids = store.getBidsByAuction(a.id)
       const blind = (a.description ?? "").includes("[BLIND]")
-      return { ...a, bidsCount: bids.length, bestBid: blind ? undefined : bids[0]?.amount ?? a.currentBid }
+      const topBid = bids[0]
+      const topBidderUser = topBid ? store.users.get(topBid.userId) : undefined
+      const minStep = Math.max(AUCTION_BID_STEP_IRR, Number(a.description?.match(/MIN_STEP:(\d+)/)?.[1] ?? AUCTION_BID_STEP_IRR))
+      return {
+        ...a,
+        minStep,
+        bidsCount: bids.length,
+        bestBid: blind ? undefined : topBid?.amount ?? a.currentBid,
+        topBidder: topBid ? {
+          userId: topBid.userId,
+          displayName: maskTopBidderName(topBidderUser?.email, topBidderUser?.profile?.fullName, topBid.userId),
+          amount: topBid.amount,
+        } : undefined,
+      }
     })
     return { items }
   })
@@ -606,11 +697,14 @@ export async function registerEnterpriseRoutes(ctx: RouteContext): Promise<void>
     if (!auction) return reply.code(404).send({ error: "AUCTION_NOT_FOUND" })
     if (auction.status !== "open") return reply.code(400).send({ error: "AUCTION_NOT_OPEN" })
     if (auction.endAt <= nowIso()) return reply.code(400).send({ error: "AUCTION_ENDED" })
-    const minStep = Number(auction.description?.match(/MIN_STEP:(\d+)/)?.[1] ?? "1")
+    const minStep = Math.max(AUCTION_BID_STEP_IRR, Number(auction.description?.match(/MIN_STEP:(\d+)/)?.[1] ?? AUCTION_BID_STEP_IRR))
     const minRequired = auction.currentBid + minStep
     if (parsed.data.amount < minRequired) return reply.code(400).send({ error: "BID_TOO_LOW", minimum: minRequired })
+    if (parsed.data.amount % minStep !== 0) return reply.code(400).send({ error: "BID_STEP_MISMATCH", minStep })
     const user = store.users.get(request.user.sub)
     if (!user) return reply.code(404).send({ error: "USER_NOT_FOUND" })
+    const vip = recalcVip(user)
+    if (vip.id < 3) return reply.code(403).send({ error: "PRO_ONLY", requiredLevel: 3 })
     if (user.walletBalance < parsed.data.amount) return reply.code(400).send({ error: "INSUFFICIENT_BALANCE" })
 
     const bid = { id: id("bid"), auctionId: auction.id, userId: user.id, amount: parsed.data.amount, createdAt: nowIso() }
@@ -626,10 +720,11 @@ export async function registerEnterpriseRoutes(ctx: RouteContext): Promise<void>
     if (!parsed.success) return reply.code(400).send({ error: "INVALID_INPUT", details: parsed.error.flatten() })
     if (parsed.data.endsAt <= parsed.data.startsAt) return reply.code(400).send({ error: "INVALID_TIME_RANGE" })
     const modeTag = parsed.data.mode === "blind" ? "[BLIND]" : "[VISIBLE]"
+    const minStep = Math.max(AUCTION_BID_STEP_IRR, parsed.data.minStep)
     const auction = {
       id: id("auc"),
       title: parsed.data.title,
-      description: `${modeTag} MIN_STEP:${parsed.data.minStep}`,
+      description: `${modeTag} MIN_STEP:${minStep}`,
       startPrice: parsed.data.startPrice,
       currentBid: parsed.data.startPrice,
       status: "open" as const,

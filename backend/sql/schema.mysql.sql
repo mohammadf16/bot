@@ -398,7 +398,7 @@ CREATE TABLE IF NOT EXISTS showroom_orders (
   id VARCHAR(64) PRIMARY KEY,
   vehicle_id VARCHAR(64) NOT NULL,
   buyer_user_id VARCHAR(64) NOT NULL,
-  payment_asset ENUM('IRR','GOLD_SOT') NOT NULL,
+  payment_asset ENUM('IRR','GOLD_SOT','LOAN') NOT NULL,
   payment_amount DECIMAL(24,6) NOT NULL,
   status ENUM('pending','paid','cancelled','completed') NOT NULL,
   created_at DATETIME(3) NOT NULL,

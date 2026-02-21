@@ -64,8 +64,12 @@ export interface AppStateSnapshot {
     id: string
     vehicleId: string
     buyerUserId: string
-    paymentAsset: "IRR" | "GOLD_SOT"
+    paymentAsset: "IRR" | "GOLD_SOT" | "LOAN"
     paymentAmount: number
+    loanMonths?: number
+    downPaymentIrr?: number
+    loanAmountIrr?: number
+    monthlyInstallmentIrr?: number
     status: "pending" | "paid" | "cancelled" | "completed"
     createdAt: string
     updatedAt: string
@@ -75,6 +79,12 @@ export interface AppStateSnapshot {
     userId: string
     principalIrr: number
     outstandingIrr: number
+    installmentCount?: number
+    monthlyInstallmentIrr?: number
+    interestRateMonthlyPercent?: number
+    totalRepayableIrr?: number
+    purpose?: "cash_credit" | "vehicle_purchase"
+    relatedVehicleId?: string
     status: "pending" | "approved" | "active" | "repaid" | "rejected" | "defaulted"
     restrictedUsage: boolean
     approvedBy?: string

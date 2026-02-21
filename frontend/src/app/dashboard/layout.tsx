@@ -106,7 +106,6 @@ export default function DashboardLayout({
     { label: "کش بک و برداشت", href: "/wallet", icon: CircleDollarSign },
     { label: "گردونه شانس", href: "/wheel", icon: Disc3 },
     { label: "قرعه‌کشی ماشین اسلاید", href: "/slide-game", icon: Car },
-    { label: "اسلاید آرنا", href: "/slide-arena", icon: Car },
     { label: "زیرمجموعه گیری", href: "/dashboard/referral", icon: User },
     { label: "تاریخچه جوایز", href: "/dashboard/history", icon: Ticket },
     { label: "قوانین و مقررات", href: "/dashboard/rules", icon: ShieldCheck },

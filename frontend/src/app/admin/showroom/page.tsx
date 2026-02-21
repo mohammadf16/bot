@@ -10,7 +10,27 @@ type Vehicle = {
   id: string
   sourceType: "lottery_winback" | "external_purchase"
   status: "available" | "reserved" | "sold" | "archived"
-  vehicle: Record<string, unknown>
+  vehicle: {
+    title: string
+    imageUrl: string
+    model: string
+    year: number
+    city: string
+    mileageKm: number
+    isNew: boolean
+    transmission: "automatic" | "manual"
+    fuelType: "gasoline" | "hybrid" | "electric" | "diesel"
+    participantsCount: number
+    raffleParticipantsCount: number
+    raffle: {
+      cashbackPercent: number
+      cashbackToGoldPercent: number
+      goldSotBack: number
+      tomanPerGoldSot: number
+      mainPrizeTitle: string
+      mainPrizeValueIrr: number
+    }
+  }
   acquisitionCostIrr?: number
   listedPriceIrr?: number
   listedPriceGoldSot?: number
@@ -35,10 +55,24 @@ export default function AdminShowroomPage() {
   const [form, setForm] = useState({
     title: "",
     imageUrl: "",
+    model: "",
+    year: String(new Date().getFullYear()),
+    city: "تهران",
+    mileageKm: "0",
     sourceType: "external_purchase" as "lottery_winback" | "external_purchase",
+    transmission: "automatic" as "automatic" | "manual",
+    fuelType: "gasoline" as "gasoline" | "hybrid" | "electric" | "diesel",
     listedPriceIrr: "",
     listedPriceGoldSot: "",
     acquisitionCostIrr: "",
+    participantsCount: "0",
+    raffleParticipantsCount: "0",
+    cashbackPercent: "20",
+    cashbackToGoldPercent: "30",
+    goldSotBack: "0",
+    tomanPerGoldSot: "100000",
+    mainPrizeTitle: "جایزه اصلی خودرو",
+    mainPrizeValueIrr: "",
   })
 
   async function loadAll() {
@@ -50,7 +84,7 @@ export default function AdminShowroomPage() {
       setVehicles(v.items)
       setOrders(o.items)
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "خطا در دریافت نمایشگاه")
+      toast.error(err instanceof Error ? err.message : "خطا در دریافت اطلاعات نمایشگاه")
     }
   }
 
@@ -61,17 +95,8 @@ export default function AdminShowroomPage() {
   useEffect(() => {
     const token = getAccessToken()
     const socket = new WebSocket(token ? `${WS_URL}?token=${encodeURIComponent(token)}` : WS_URL)
-    socket.onmessage = (ev) => {
-      try {
-        const msg = JSON.parse(ev.data) as { type: string; payload: { type?: string } }
-        if (msg.type !== "event") return
-        const evtType = msg.payload?.type
-        if (evtType === "showroom.vehicle" || evtType === "showroom.order") {
-          void loadAll()
-        }
-      } catch {
-        // noop
-      }
+    socket.onmessage = () => {
+      void loadAll()
     }
     return () => socket.close()
   }, [])
@@ -79,25 +104,39 @@ export default function AdminShowroomPage() {
   const summary = useMemo(() => ({
     available: vehicles.filter((v) => v.status === "available").length,
     sold: vehicles.filter((v) => v.status === "sold").length,
-    ordersPaid: orders.filter((o) => o.status === "paid").length,
+    ordersPaid: orders.filter((o) => o.status === "paid" || o.status === "completed").length,
   }), [vehicles, orders])
 
   async function createVehicle() {
-    if (!form.title.trim() || !form.imageUrl.trim()) return toast.error("عنوان و عکس لازم است")
+    if (!form.title.trim() || !form.imageUrl.trim() || !form.model.trim()) return toast.error("عنوان، عکس و مدل الزامی است")
     try {
       await apiRequest("/admin/showroom/vehicles", {
         method: "POST",
         body: JSON.stringify({
           title: form.title.trim(),
           imageUrl: form.imageUrl.trim(),
+          model: form.model.trim(),
+          year: Number(form.year),
+          city: form.city.trim(),
+          mileageKm: Number(form.mileageKm),
           sourceType: form.sourceType,
+          transmission: form.transmission,
+          fuelType: form.fuelType,
           listedPriceIrr: form.listedPriceIrr ? Number(form.listedPriceIrr) : undefined,
           listedPriceGoldSot: form.listedPriceGoldSot ? Number(form.listedPriceGoldSot) : undefined,
           acquisitionCostIrr: form.acquisitionCostIrr ? Number(form.acquisitionCostIrr) : undefined,
+          participantsCount: Number(form.participantsCount),
+          raffleParticipantsCount: Number(form.raffleParticipantsCount),
+          cashbackPercent: Number(form.cashbackPercent),
+          cashbackToGoldPercent: Number(form.cashbackToGoldPercent),
+          goldSotBack: Number(form.goldSotBack),
+          tomanPerGoldSot: Number(form.tomanPerGoldSot),
+          mainPrizeTitle: form.mainPrizeTitle.trim(),
+          mainPrizeValueIrr: Number(form.mainPrizeValueIrr || 0),
         }),
       })
-      setForm({ title: "", imageUrl: "", sourceType: "external_purchase", listedPriceIrr: "", listedPriceGoldSot: "", acquisitionCostIrr: "" })
-      toast.success("خودرو به نمایشگاه اضافه شد")
+      toast.success("خودرو با جزئیات کامل ثبت شد")
+      setForm((prev) => ({ ...prev, title: "", imageUrl: "", model: "", listedPriceIrr: "", listedPriceGoldSot: "", mainPrizeValueIrr: "" }))
       await loadAll()
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "ثبت خودرو ناموفق بود")
@@ -128,28 +167,41 @@ export default function AdminShowroomPage() {
     }
   }
 
+  const inputClass = "bg-black/30 border border-white/15 rounded-xl px-3 py-2"
+
   return (
     <div className="space-y-6" dir="rtl">
-      <h1 className="text-3xl font-black">مدیریت نمایشگاه و حواله خودرو</h1>
+      <h1 className="text-3xl font-black">مدیریت نمایشگاه خودرو</h1>
 
       <section className="grid md:grid-cols-3 gap-3">
-        <div className="card glass p-4">خودرو قابل خرید: {summary.available.toLocaleString("fa-IR")}</div>
-        <div className="card glass p-4">خودرو فروخته شده: {summary.sold.toLocaleString("fa-IR")}</div>
-        <div className="card glass p-4">سفارش پرداخت شده: {summary.ordersPaid.toLocaleString("fa-IR")}</div>
+        <div className="card glass p-4">خودروی قابل خرید: {summary.available.toLocaleString("fa-IR")}</div>
+        <div className="card glass p-4">خودروی فروخته‌شده: {summary.sold.toLocaleString("fa-IR")}</div>
+        <div className="card glass p-4">سفارش پرداخت‌شده: {summary.ordersPaid.toLocaleString("fa-IR")}</div>
       </section>
 
       <section className="card glass p-6 space-y-3">
-        <h2 className="text-xl font-black">افزودن خودرو</h2>
+        <h2 className="text-xl font-black">افزودن خودرو با تنظیمات کامل</h2>
         <div className="grid md:grid-cols-3 gap-3">
-          <input value={form.title} onChange={(e) => setForm((p) => ({ ...p, title: e.target.value }))} className="bg-black/30 border border-white/15 rounded-xl px-3 py-2" placeholder="عنوان خودرو" />
-          <input value={form.imageUrl} onChange={(e) => setForm((p) => ({ ...p, imageUrl: e.target.value }))} className="bg-black/30 border border-white/15 rounded-xl px-3 py-2" placeholder="آدرس عکس" />
-          <select value={form.sourceType} onChange={(e) => setForm((p) => ({ ...p, sourceType: e.target.value as Vehicle["sourceType"] }))} className="bg-black/30 border border-white/15 rounded-xl px-3 py-2">
-            <option value="external_purchase">خرید مستقیم سایت</option>
-            <option value="lottery_winback">بازخرید از برنده</option>
-          </select>
-          <input value={form.listedPriceIrr} onChange={(e) => setForm((p) => ({ ...p, listedPriceIrr: e.target.value }))} className="bg-black/30 border border-white/15 rounded-xl px-3 py-2" placeholder="قیمت تومان" />
-          <input value={form.listedPriceGoldSot} onChange={(e) => setForm((p) => ({ ...p, listedPriceGoldSot: e.target.value }))} className="bg-black/30 border border-white/15 rounded-xl px-3 py-2" placeholder="قیمت سوت" />
-          <input value={form.acquisitionCostIrr} onChange={(e) => setForm((p) => ({ ...p, acquisitionCostIrr: e.target.value }))} className="bg-black/30 border border-white/15 rounded-xl px-3 py-2" placeholder="هزینه تملک" />
+          <input value={form.title} onChange={(e) => setForm((p) => ({ ...p, title: e.target.value }))} className={inputClass} placeholder="عنوان خودرو" />
+          <input value={form.model} onChange={(e) => setForm((p) => ({ ...p, model: e.target.value }))} className={inputClass} placeholder="مدل" />
+          <input value={form.imageUrl} onChange={(e) => setForm((p) => ({ ...p, imageUrl: e.target.value }))} className={inputClass} placeholder="آدرس عکس" />
+          <input value={form.year} onChange={(e) => setForm((p) => ({ ...p, year: e.target.value }))} className={inputClass} placeholder="سال ساخت" />
+          <input value={form.city} onChange={(e) => setForm((p) => ({ ...p, city: e.target.value }))} className={inputClass} placeholder="شهر" />
+          <input value={form.mileageKm} onChange={(e) => setForm((p) => ({ ...p, mileageKm: e.target.value }))} className={inputClass} placeholder="کیلومتر کارکرد" />
+          <select value={form.sourceType} onChange={(e) => setForm((p) => ({ ...p, sourceType: e.target.value as Vehicle["sourceType"] }))} className={inputClass}><option value="external_purchase">خرید مستقیم</option><option value="lottery_winback">بازخرید</option></select>
+          <select value={form.transmission} onChange={(e) => setForm((p) => ({ ...p, transmission: e.target.value as Vehicle["vehicle"]["transmission"] }))} className={inputClass}><option value="automatic">اتوماتیک</option><option value="manual">دنده‌ای</option></select>
+          <select value={form.fuelType} onChange={(e) => setForm((p) => ({ ...p, fuelType: e.target.value as Vehicle["vehicle"]["fuelType"] }))} className={inputClass}><option value="gasoline">بنزینی</option><option value="hybrid">هیبرید</option><option value="electric">برقی</option><option value="diesel">دیزلی</option></select>
+          <input value={form.listedPriceIrr} onChange={(e) => setForm((p) => ({ ...p, listedPriceIrr: e.target.value }))} className={inputClass} placeholder="قیمت تومان" />
+          <input value={form.listedPriceGoldSot} onChange={(e) => setForm((p) => ({ ...p, listedPriceGoldSot: e.target.value }))} className={inputClass} placeholder="قیمت سوت" />
+          <input value={form.acquisitionCostIrr} onChange={(e) => setForm((p) => ({ ...p, acquisitionCostIrr: e.target.value }))} className={inputClass} placeholder="هزینه تملک" />
+          <input value={form.participantsCount} onChange={(e) => setForm((p) => ({ ...p, participantsCount: e.target.value }))} className={inputClass} placeholder="شرکت‌کننده ماشین" />
+          <input value={form.raffleParticipantsCount} onChange={(e) => setForm((p) => ({ ...p, raffleParticipantsCount: e.target.value }))} className={inputClass} placeholder="شرکت‌کننده قرعه" />
+          <input value={form.cashbackPercent} onChange={(e) => setForm((p) => ({ ...p, cashbackPercent: e.target.value }))} className={inputClass} placeholder="درصد کش‌بک" />
+          <input value={form.cashbackToGoldPercent} onChange={(e) => setForm((p) => ({ ...p, cashbackToGoldPercent: e.target.value }))} className={inputClass} placeholder="درصد تبدیل به سوت" />
+          <input value={form.goldSotBack} onChange={(e) => setForm((p) => ({ ...p, goldSotBack: e.target.value }))} className={inputClass} placeholder="مقدار سوت برگشتی" />
+          <input value={form.tomanPerGoldSot} onChange={(e) => setForm((p) => ({ ...p, tomanPerGoldSot: e.target.value }))} className={inputClass} placeholder="نرخ تومان به سوت" />
+          <input value={form.mainPrizeTitle} onChange={(e) => setForm((p) => ({ ...p, mainPrizeTitle: e.target.value }))} className={inputClass} placeholder="عنوان جایزه اصلی" />
+          <input value={form.mainPrizeValueIrr} onChange={(e) => setForm((p) => ({ ...p, mainPrizeValueIrr: e.target.value }))} className={inputClass} placeholder="ارزش جایزه اصلی" />
         </div>
         <button onClick={createVehicle} className="btn-primary">ثبت خودرو</button>
       </section>
@@ -157,44 +209,43 @@ export default function AdminShowroomPage() {
       <section className="card glass p-6">
         <h2 className="text-xl font-black mb-3">خودروها</h2>
         <div className="space-y-2">
-          {vehicles.map((v) => (
-            <div key={v.id} className="p-3 rounded-xl border border-white/10 bg-black/20 flex flex-wrap items-center justify-between gap-3">
+          {vehicles.map((vehicle) => (
+            <div key={vehicle.id} className="p-3 rounded-xl border border-white/10 bg-black/20 flex flex-wrap items-center justify-between gap-3">
               <div>
-                <p className="font-bold">{String(v.vehicle?.["title"] ?? v.id)}</p>
-                <p className="text-xs text-white/60">{v.status} | IRR: {v.listedPriceIrr ?? "-"} | SOT: {v.listedPriceGoldSot ?? "-"}</p>
+                <p className="font-bold">{vehicle.vehicle.title}</p>
+                <p className="text-xs text-white/60">{vehicle.vehicle.year} | {vehicle.vehicle.model} | {vehicle.vehicle.city}</p>
+                <p className="text-xs text-white/60">شرکت‌کننده ماشین: {vehicle.vehicle.participantsCount.toLocaleString("fa-IR")} | قرعه: {vehicle.vehicle.raffleParticipantsCount.toLocaleString("fa-IR")}</p>
               </div>
               <div className="flex gap-2">
-                {(["available", "reserved", "sold", "archived"] as Vehicle["status"][]).map((st) => (
-                  <button key={st} onClick={() => void changeVehicleStatus(v.id, st)} className={`px-3 py-1 rounded-lg text-xs border ${v.status === st ? "border-accent-gold text-accent-gold" : "border-white/20 text-white/70"}`}>
-                    {st}
+                {(["available", "reserved", "sold", "archived"] as Vehicle["status"][]).map((status) => (
+                  <button key={status} onClick={() => void changeVehicleStatus(vehicle.id, status)} className={`px-3 py-1 rounded-lg text-xs border ${vehicle.status === status ? "border-accent-gold text-accent-gold" : "border-white/20 text-white/70"}`}>
+                    {status}
                   </button>
                 ))}
               </div>
             </div>
           ))}
-          {!vehicles.length ? <p className="text-sm text-white/50">خودرویی ثبت نشده است.</p> : null}
         </div>
       </section>
 
       <section className="card glass p-6">
         <h2 className="text-xl font-black mb-3">سفارش‌ها</h2>
         <div className="space-y-2">
-          {orders.map((o) => (
-            <div key={o.id} className="p-3 rounded-xl border border-white/10 bg-black/20 flex flex-wrap items-center justify-between gap-3">
+          {orders.map((order) => (
+            <div key={order.id} className="p-3 rounded-xl border border-white/10 bg-black/20 flex flex-wrap items-center justify-between gap-3">
               <div>
-                <p className="font-bold">{o.vehicleTitle}</p>
-                <p className="text-xs text-white/60">{o.buyerEmail} | {o.paymentAsset} | {o.paymentAmount.toLocaleString("fa-IR")} | {o.status}</p>
+                <p className="font-bold">{order.vehicleTitle}</p>
+                <p className="text-xs text-white/60">{order.buyerEmail} | {order.paymentAsset} | {order.paymentAmount.toLocaleString("fa-IR")} | {order.status}</p>
               </div>
               <div className="flex gap-2">
-                {(["pending", "paid", "completed", "cancelled"] as Order["status"][]).map((st) => (
-                  <button key={st} onClick={() => void changeOrderStatus(o.id, st)} className={`px-3 py-1 rounded-lg text-xs border ${o.status === st ? "border-accent-gold text-accent-gold" : "border-white/20 text-white/70"}`}>
-                    {st}
+                {(["pending", "paid", "completed", "cancelled"] as Order["status"][]).map((status) => (
+                  <button key={status} onClick={() => void changeOrderStatus(order.id, status)} className={`px-3 py-1 rounded-lg text-xs border ${order.status === status ? "border-accent-gold text-accent-gold" : "border-white/20 text-white/70"}`}>
+                    {status}
                   </button>
                 ))}
               </div>
             </div>
           ))}
-          {!orders.length ? <p className="text-sm text-white/50">سفارشی وجود ندارد.</p> : null}
         </div>
       </section>
     </div>

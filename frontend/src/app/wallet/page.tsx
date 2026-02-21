@@ -41,6 +41,9 @@ type WalletPayload = {
 export default function WalletPage() {
   const { isAuthenticated } = useAuth()
   const [amount, setAmount] = useState("")
+  const [cardToCardAmount, setCardToCardAmount] = useState("")
+  const [fromCardLast4, setFromCardLast4] = useState("")
+  const [trackingCode, setTrackingCode] = useState("")
   const [withdrawAmount, setWithdrawAmount] = useState("")
   const [loanAmount, setLoanAmount] = useState("5000000")
   const [goldToSell, setGoldToSell] = useState("1")
@@ -81,6 +84,29 @@ export default function WalletPage() {
       await loadWallet()
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "خطا در شارژ کیف پول")
+    }
+  }
+
+  async function handleCardToCardDeposit() {
+    const parsed = parseTomanInput(cardToCardAmount)
+    if (!parsed) return toast.error("مبلغ کارت به کارت معتبر نیست")
+    if (!/^\d{4}$/.test(fromCardLast4)) return toast.error("۴ رقم آخر کارت نامعتبر است")
+    if ((trackingCode ?? "").trim().length < 4) return toast.error("کد پیگیری نامعتبر است")
+    try {
+      await apiRequest<{ ok: boolean; status: string }>("/wallet/deposit/card-to-card", {
+        method: "POST",
+        body: JSON.stringify({
+          amount: parsed,
+          fromCardLast4,
+          trackingCode: trackingCode.trim(),
+        }),
+      })
+      setCardToCardAmount("")
+      setFromCardLast4("")
+      setTrackingCode("")
+      toast.success("درخواست واریز کارت به کارت ثبت شد (در انتظار تایید)")
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "ثبت کارت به کارت ناموفق بود")
     }
   }
 
@@ -218,12 +244,23 @@ export default function WalletPage() {
 
         <section className="grid md:grid-cols-2 gap-6 mb-8">
           <div className="card glass p-8">
-            <h3 className="text-xl font-black mb-4">شارژ کیف پول</h3>
+            <h3 className="text-xl font-black mb-4">درگاه آنلاین شارژ</h3>
             <input value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="مبلغ شارژ (تومان)" className="w-full bg-dark-bg/50 border border-dark-border/40 rounded-xl px-4 py-3 mb-4" />
             <button onClick={handleDeposit} className="btn-primary w-full">شارژ</button>
           </div>
 
           <div className="card glass p-8">
+            <h3 className="text-xl font-black mb-4">واریز کارت به کارت</h3>
+            <p className="text-xs text-dark-text/60 mb-3">کارت مقصد: <b>6037-9979-0000-1234</b></p>
+            <input value={cardToCardAmount} onChange={(e) => setCardToCardAmount(e.target.value)} placeholder="مبلغ واریز (تومان)" className="w-full bg-dark-bg/50 border border-dark-border/40 rounded-xl px-4 py-3 mb-3" />
+            <div className="grid grid-cols-2 gap-3 mb-3">
+              <input value={fromCardLast4} onChange={(e) => setFromCardLast4(e.target.value)} placeholder="۴ رقم آخر کارت" className="w-full bg-dark-bg/50 border border-dark-border/40 rounded-xl px-4 py-3" />
+              <input value={trackingCode} onChange={(e) => setTrackingCode(e.target.value)} placeholder="کد پیگیری" className="w-full bg-dark-bg/50 border border-dark-border/40 rounded-xl px-4 py-3" />
+            </div>
+            <button onClick={handleCardToCardDeposit} className="btn-secondary w-full">ثبت فیش کارت به کارت</button>
+          </div>
+
+          <div className="card glass p-8 md:col-span-2">
             <h3 className="text-xl font-black mb-4">برداشت</h3>
             <input value={withdrawAmount} onChange={(e) => setWithdrawAmount(e.target.value)} placeholder="مبلغ برداشت (تومان)" className="w-full bg-dark-bg/50 border border-dark-border/40 rounded-xl px-4 py-3 mb-4" />
             <button onClick={handleWithdraw} className="btn-secondary w-full">ثبت درخواست برداشت</button>

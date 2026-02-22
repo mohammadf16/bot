@@ -1,4 +1,4 @@
-import type { Metadata, Viewport } from "next"
+﻿import type { Metadata, Viewport } from "next"
 import { Providers } from "@/components/providers"
 import { Header } from "@/components/layout/header"
 import { Footer } from "@/components/layout/footer"
@@ -7,9 +7,9 @@ import "./globals.css"
 const basePath = process.env.NEXT_PUBLIC_BASE_PATH ?? ""
 
 export const metadata: Metadata = {
-  title: "قرعه کشی ماشین | Car Raffle - سایت قمار حتی شانس و عدالت",
+  title: "فروش خودرو | نمایشگاه آنلاین خودرو",
   description:
-    "سایت قرعه کشی ماشین با بازی گردونه شانس، ماشین اسلاید، و امکان کسب جوایز متنوع",
+    "پلتفرم فروش خودرو با امکان مشاهده، مقایسه و خرید خودرو به صورت آنلاین.",
 }
 
 export const viewport: Viewport = {
@@ -39,3 +39,4 @@ export default function RootLayout({
     </html>
   )
 }
+

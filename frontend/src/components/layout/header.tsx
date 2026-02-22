@@ -39,6 +39,7 @@ export function Header() {
   const menuItems = [
     { label: "خانه", href: "/" },
     { label: "خودرو", href: "/cars" },
+    { label: "ماشین اسلاید", href: "/slide-game" },
     { label: "مزایده", href: "/auction" },
     { label: "وام", href: "/loan" },
     { label: "کیف پول", href: "/wallet" },

@@ -1,28 +1,53 @@
 ﻿"use client"
 
 import { motion, AnimatePresence, useMotionTemplate } from "framer-motion"
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import Link from "next/link"
 import { ArrowLeft, ChevronDown, Crown, Gift, Smartphone, Trophy, CircleDollarSign, CarFront } from "lucide-react"
+import { apiRequest } from "@/lib/api"
 
 const basePath = process.env.NEXT_PUBLIC_BASE_PATH ?? ""
 const withBasePath = (path: string) => `${basePath}${path}`
 
-const HERO_SLIDES = [
+type ShowroomVehicle = {
+  id: string
+  sourceType: "lottery_winback" | "external_purchase"
+  status: "available" | "reserved" | "sold" | "archived"
+  vehicle: {
+    title: string
+    imageUrl: string
+    model: string
+    year: number
+    city: string
+    mileageKm: number
+    isNew: boolean
+    transmission: "automatic" | "manual"
+    fuelType: "gasoline" | "hybrid" | "electric" | "diesel"
+    participantsCount: number
+    raffleParticipantsCount: number
+  }
+  listedPriceIrr?: number
+  listedPriceGoldSot?: number
+}
+
+const DEFAULT_HERO_SLIDES = [
   {
     image: withBasePath("/photo/1.avif"),
-    title: "فروش خودرو و قرعه کشی هوشمند",
-    subtitle: "خرید خودرو، خرید بلیط، کش بک و بازی مالی در یک پلتفرم یکپارچه.",
+    title: "BMW M440i xDrive",
+    subtitle: "مدل 2024 | تهران | صفر کیلومتر",
+    href: "/cars/vehicle-1",
   },
   {
     image: withBasePath("/photo/2.avif"),
-    title: "اسلایدر زنده خودروها",
-    subtitle: "از اقتصادی تا لوکس، با جزئیات کامل و امکان خرید مستقیم یا اقساطی.",
+    title: "Mercedes-Benz C300",
+    subtitle: "مدل 2023 | اصفهان | کارکرد 22,000 کیلومتر",
+    href: "/cars/vehicle-2",
   },
   {
     image: withBasePath("/photo/3.jpg"),
-    title: "شانس واقعی با شفافیت واقعی",
-    subtitle: "گردونه شانس، ماشین اسلاید و اسلاید آرنا با قوانین شفاف و قابل پیگیری.",
+    title: "Audi A4",
+    subtitle: "مدل 2022 | شیراز | کارکرد 41,000 کیلومتر",
+    href: "/cars/vehicle-3",
   },
 ]
 
@@ -34,7 +59,7 @@ const MOBILE_QUICK_LINKS = [
   { label: "مزایده خودرو", href: "/auction" },
 ]
 
-const MOBILE_CAR_SCENES = [
+const DEFAULT_MOBILE_CAR_SCENES = [
   {
     image: withBasePath("/photo/auto.png"),
     title: "ویترین خودروهای روز",
@@ -57,6 +82,21 @@ const MOBILE_CAR_SCENES = [
     cta: "شروع بازی",
   },
 ]
+
+type HeroSlide = {
+  image: string
+  title: string
+  subtitle: string
+  href: string
+}
+
+type MobileCarScene = {
+  image: string
+  title: string
+  subtitle: string
+  href: string
+  cta: string
+}
 
 const GlobalStyles = ({ isMobile }: { isMobile: boolean }) => (
   <style>{`
@@ -137,22 +177,27 @@ const SectionWrapper = ({ children, className = "", fullWidth = false }: { child
   </section>
 )
 
-const HeroSection = ({ onNext }: { onNext: () => void }) => {
+const HeroSection = ({ onNext, slides }: { onNext: () => void; slides: HeroSlide[] }) => {
   const [activeSlide, setActiveSlide] = useState(0)
+  const safeSlides = slides.length > 0 ? slides : DEFAULT_HERO_SLIDES
 
   useEffect(() => {
-    const id = setInterval(() => setActiveSlide((p) => (p + 1) % HERO_SLIDES.length), 5000)
+    setActiveSlide(0)
+  }, [safeSlides.length])
+
+  useEffect(() => {
+    const id = setInterval(() => setActiveSlide((p) => (p + 1) % safeSlides.length), 5000)
     return () => clearInterval(id)
-  }, [])
+  }, [safeSlides.length])
 
   return (
     <SectionWrapper className="bg-black" fullWidth>
       <div className="absolute inset-0 z-0 overflow-hidden">
         <AnimatePresence mode="sync">
           <motion.img
-            key={HERO_SLIDES[activeSlide].image}
-            src={HERO_SLIDES[activeSlide].image}
-            alt={HERO_SLIDES[activeSlide].title}
+            key={safeSlides[activeSlide].image}
+            src={safeSlides[activeSlide].image}
+            alt={safeSlides[activeSlide].title}
             initial={{ opacity: 0, scale: 1.08 }}
             animate={{ opacity: 1, scale: 1.02 }}
             exit={{ opacity: 0 }}
@@ -176,7 +221,7 @@ const HeroSection = ({ onNext }: { onNext: () => void }) => {
             animate={{ opacity: 1 }}
             className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-black text-white leading-[1.18] sm:leading-[1.1] tracking-tight min-h-[90px] md:min-h-[140px]"
           >
-            {HERO_SLIDES[activeSlide].title}
+            {safeSlides[activeSlide].title}
           </motion.h1>
 
           <motion.p
@@ -185,11 +230,11 @@ const HeroSection = ({ onNext }: { onNext: () => void }) => {
             animate={{ opacity: 1 }}
             className="mt-3 text-[15px] md:text-lg text-white/80 leading-7 md:leading-8 min-h-[56px] md:min-h-[64px]"
           >
-            {HERO_SLIDES[activeSlide].subtitle}
+            {safeSlides[activeSlide].subtitle}
           </motion.p>
 
           <div className="flex items-center justify-end gap-2 pt-4">
-            {HERO_SLIDES.map((_, i) => (
+            {safeSlides.map((_, i) => (
               <button
                 key={i}
                 type="button"
@@ -200,12 +245,14 @@ const HeroSection = ({ onNext }: { onNext: () => void }) => {
           </div>
 
           <div className="pt-5 flex flex-col sm:flex-row gap-3 md:gap-4 justify-end items-center">
-            <GlassButton primary onClick={onNext} className="w-full sm:w-auto px-12">
-              مشاهده فرصت ها <ArrowLeft size={18} />
-            </GlassButton>
-            <Link href="/dashboard" className="w-full sm:w-auto">
-              <GlassButton className="w-full sm:w-auto">ورود به پنل</GlassButton>
+            <Link href={safeSlides[activeSlide].href} className="w-full sm:w-auto">
+              <GlassButton primary className="w-full sm:w-auto px-12">
+                جزئیات این خودرو <ArrowLeft size={18} />
+              </GlassButton>
             </Link>
+            <GlassButton onClick={onNext} className="w-full sm:w-auto">
+              بخش‌های بعدی
+            </GlassButton>
           </div>
         </div>
       </div>
@@ -361,22 +408,28 @@ const FooterCTA = () => (
   </SectionWrapper>
 )
 
-const MobileHomeExperience = () => {
+const MobileHomeExperience = ({ slides, scenes }: { slides: HeroSlide[]; scenes: MobileCarScene[] }) => {
   const [activeSlide, setActiveSlide] = useState(0)
+  const safeSlides = slides.length > 0 ? slides : DEFAULT_HERO_SLIDES
+  const safeScenes = scenes.length > 0 ? scenes : DEFAULT_MOBILE_CAR_SCENES
 
   useEffect(() => {
-    const id = setInterval(() => setActiveSlide((p) => (p + 1) % HERO_SLIDES.length), 4500)
+    setActiveSlide(0)
+  }, [safeSlides.length])
+
+  useEffect(() => {
+    const id = setInterval(() => setActiveSlide((p) => (p + 1) % safeSlides.length), 4500)
     return () => clearInterval(id)
-  }, [])
+  }, [safeSlides.length])
 
   return (
     <div className="relative z-10 w-full">
       <section className="relative min-h-[100svh] overflow-hidden">
         <AnimatePresence mode="sync">
           <motion.img
-            key={`mobile-hero-${HERO_SLIDES[activeSlide].image}`}
-            src={HERO_SLIDES[activeSlide].image}
-            alt={HERO_SLIDES[activeSlide].title}
+            key={`mobile-hero-${safeSlides[activeSlide].image}`}
+            src={safeSlides[activeSlide].image}
+            alt={safeSlides[activeSlide].title}
             initial={{ opacity: 0, scale: 1.08 }}
             animate={{ opacity: 1, scale: 1.02 }}
             exit={{ opacity: 0 }}
@@ -392,14 +445,14 @@ const MobileHomeExperience = () => {
             تجربه خودرو محور
           </span>
           <h1 className="mt-4 text-[32px] leading-[1.2] font-black text-white">
-            {HERO_SLIDES[activeSlide].title}
+            {safeSlides[activeSlide].title}
           </h1>
           <p className="mt-3 max-w-[32ch] text-[15px] leading-7 text-white/85">
-            {HERO_SLIDES[activeSlide].subtitle}
+            {safeSlides[activeSlide].subtitle}
           </p>
 
           <div className="mt-4 flex items-center gap-2">
-            {HERO_SLIDES.map((_, i) => (
+            {safeSlides.map((_, i) => (
               <button
                 key={`mobile-dot-${i}`}
                 type="button"
@@ -410,11 +463,11 @@ const MobileHomeExperience = () => {
           </div>
 
           <div className="mt-6 grid grid-cols-2 gap-3">
-            <Link href="/cars">
-              <GlassButton primary className="w-full">ورود به نمایشگاه</GlassButton>
+            <Link href={safeSlides[activeSlide].href}>
+              <GlassButton primary className="w-full">جزئیات خودرو</GlassButton>
             </Link>
-            <Link href="/raffles">
-              <GlassButton className="w-full">شروع قرعه کشی</GlassButton>
+            <Link href="/cars">
+              <GlassButton className="w-full">همه خودروها</GlassButton>
             </Link>
           </div>
 
@@ -433,7 +486,7 @@ const MobileHomeExperience = () => {
       </section>
 
       <section className="px-4 py-8 space-y-5">
-        {MOBILE_CAR_SCENES.map((scene, index) => (
+        {safeScenes.map((scene, index) => (
           <motion.article
             key={scene.href}
             initial={{ y: 40, opacity: 0 }}
@@ -489,8 +542,47 @@ export default function HomePage() {
   const [activeSection, setActiveSection] = useState(0)
   const [mousePos, setMousePos] = useState({ x: 0, y: 0 })
   const [isMobile, setIsMobile] = useState(false)
+  const [showroomVehicles, setShowroomVehicles] = useState<ShowroomVehicle[]>([])
   const scrollTimeout = useRef<NodeJS.Timeout | null>(null)
   const sectionsCount = 5
+
+  useEffect(() => {
+    let isMounted = true
+
+    async function loadHomeData() {
+      try {
+        const vehiclesData = await apiRequest<{ items: ShowroomVehicle[] }>("/showroom/vehicles", { method: "GET" }, { auth: false })
+
+        if (!isMounted) return
+        setShowroomVehicles(vehiclesData.items ?? [])
+      } catch (error) {
+        console.error("Failed to load home data", error)
+      }
+    }
+
+    void loadHomeData()
+
+    return () => {
+      isMounted = false
+    }
+  }, [])
+
+  const heroSlides = useMemo<HeroSlide[]>(() => {
+    if (showroomVehicles.length === 0) return DEFAULT_HERO_SLIDES
+
+    return showroomVehicles.slice(0, 5).map((item) => {
+      const mileage = item.vehicle.isNew ? "صفر کیلومتر" : `${item.vehicle.mileageKm.toLocaleString("fa-IR")} کیلومتر`
+      const price = item.listedPriceIrr ? `${item.listedPriceIrr.toLocaleString("fa-IR")} تومان` : "قیمت تماس"
+      return {
+        image: item.vehicle.imageUrl || withBasePath("/photo/auto.png"),
+        title: item.vehicle.title,
+        subtitle: `${item.vehicle.model} | سال ${item.vehicle.year.toLocaleString("fa-IR")} | ${item.vehicle.city} | ${mileage} | ${price}`,
+        href: `/cars/${item.id}`,
+      }
+    })
+  }, [showroomVehicles])
+
+  const mobileScenes = DEFAULT_MOBILE_CAR_SCENES
 
   useEffect(() => {
     const media = window.matchMedia("(max-width: 1023px)")
@@ -534,10 +626,10 @@ export default function HomePage() {
       <AmbientLight mouseX={mousePos.x} mouseY={mousePos.y} />
 
       {isMobile ? (
-        <MobileHomeExperience />
+        <MobileHomeExperience slides={heroSlides} scenes={mobileScenes} />
       ) : (
         <motion.div className="w-full h-full" animate={{ y: `-${activeSection * 100}%` }} transition={{ duration: 0.8, ease: [0.6, 0.05, -0.01, 0.9] }}>
-          <div className="h-full w-full"><HeroSection onNext={() => setActiveSection(1)} /></div>
+          <div className="h-full w-full"><HeroSection onNext={() => setActiveSection(1)} slides={heroSlides} /></div>
           <div className="h-full w-full"><WheelPreviewSection /></div>
           <div className="h-full w-full"><ServiceSection /></div>
           <div className="h-full w-full"><ActiveRafflesSection /></div>

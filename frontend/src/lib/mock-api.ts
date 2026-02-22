@@ -167,6 +167,71 @@ type SlideDrawState = {
   entries?: Array<{ entryNumber: number; userId: string; userEmail: string; fullName: string; createdAt: string }>
 }
 
+const SLIDE_NUMBER_MIN = 0
+const SLIDE_NUMBER_MAX = 999999
+const SLIDE_PROCESSING_MS = 1200
+const SLIDE_RESULT_SETTLE_MS = 15000
+
+function nextTopOfHourIso(fromInput?: string | number | Date) {
+  const now = Date.now()
+  const base = fromInput ? new Date(fromInput) : new Date(now)
+  const safeBase = Number.isNaN(base.getTime()) ? new Date(now) : base
+  safeBase.setMinutes(0, 0, 0)
+  if (safeBase.getTime() <= now) safeBase.setHours(safeBase.getHours() + 1)
+  return safeBase.toISOString()
+}
+
+function secureRandomHex(length = 64) {
+  const safeLength = Math.max(2, Math.trunc(length))
+  if (typeof crypto !== "undefined" && "getRandomValues" in crypto) {
+    const bytes = new Uint8Array(Math.ceil(safeLength / 2))
+    crypto.getRandomValues(bytes)
+    return Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("").slice(0, safeLength)
+  }
+  return Array.from({ length: safeLength }, () => Math.floor(Math.random() * 16).toString(16)).join("")
+}
+
+function fnv1a32(input: string) {
+  let hash = 0x811c9dc5
+  for (let i = 0; i < input.length; i += 1) {
+    hash ^= input.charCodeAt(i)
+    hash = Math.imul(hash, 0x01000193)
+  }
+  return hash >>> 0
+}
+
+function deterministicHashHex(input: string, blocks = 8) {
+  const safeBlocks = Math.max(1, Math.trunc(blocks))
+  let seed = input
+  let out = ""
+  for (let i = 0; i < safeBlocks; i += 1) {
+    const block = fnv1a32(`${seed}|${i}`)
+    const hex = block.toString(16).padStart(8, "0")
+    out += hex
+    seed = `${seed}|${hex}`
+  }
+  return out
+}
+
+function makeSlideSeedCommitPair() {
+  const revealedServerSeed = secureRandomHex(64)
+  const commitSource = `slide-hourly|${revealedServerSeed}`
+  const seedCommitHash = `0x${deterministicHashHex(commitSource, 8)}`
+  return { revealedServerSeed, seedCommitHash }
+}
+
+function numberFromEntropy(seed: string, min = SLIDE_NUMBER_MIN, max = SLIDE_NUMBER_MAX) {
+  const low = Math.min(min, max)
+  const high = Math.max(min, max)
+  const span = high - low + 1
+  const n = fnv1a32(seed)
+  return low + (n % span)
+}
+
+function randomSlideChanceNumber() {
+  return Math.floor(Math.random() * (SLIDE_NUMBER_MAX - SLIDE_NUMBER_MIN + 1)) + SLIDE_NUMBER_MIN
+}
+
 export class MockApiError extends Error {
   statusCode: number
   constructor(message: string, statusCode: number = 400) {
@@ -273,15 +338,24 @@ let raffles = (mockData.MOCK_RAFFLES as Array<{
     mainPrizeValueIrr: 8500000000,
   },
 })) as RaffleState[]
+const initialSlideSeedPair = makeSlideSeedCommitPair()
 let slideDrawState: SlideDrawState = {
   ...(JSON.parse(JSON.stringify(mockData.MOCK_SLIDE_DRAW.draw)) as SlideDrawState),
+  status: "scheduled",
+  scheduledAt: nextTopOfHourIso((mockData.MOCK_SLIDE_DRAW.draw as SlideDrawState).scheduledAt),
   createdAt: new Date().toISOString(),
   updatedAt: new Date().toISOString(),
-  seedCommitHash: `0x${Math.random().toString(16).slice(2)}${Math.random().toString(16).slice(2)}`,
+  seedCommitHash: initialSlideSeedPair.seedCommitHash,
   proof: null,
+  targetNumber: undefined,
+  winningLogs: [],
+  winners: [],
   entries: [],
 }
 let slideDrawHistory: SlideDrawState[] = []
+let slideServerSeeds: Record<string, string> = {
+  [slideDrawState.id]: initialSlideSeedPair.revealedServerSeed,
+}
 let slideProcessingUntil = 0
 let gameDifficulty = 50
 let slideSingleState = {
@@ -327,8 +401,8 @@ for (const p of slideDrawState.participants ?? []) {
   const count = Math.max(0, safeNumber(p.chances, 0))
   slideEntriesByUser[p.userId] = []
   for (let i = 0; i < count; i += 1) {
-    let candidate = Math.floor(Math.random() * 99999) + 1
-    while (slideUsedNumbers.has(candidate)) candidate = Math.floor(Math.random() * 99999) + 1
+    let candidate = randomSlideChanceNumber()
+    while (slideUsedNumbers.has(candidate)) candidate = randomSlideChanceNumber()
     slideEntriesByUser[p.userId].push(candidate)
     slideUsedNumbers.add(candidate)
   }
@@ -362,6 +436,7 @@ function flattenSlideEntries() {
 function finalizeSlideDraw() {
   hydrateSlideParticipants()
   const entries = flattenSlideEntries()
+  const sortedEntries = [...entries].sort((a, b) => a.entryNumber - b.entryNumber || a.userId.localeCompare(b.userId))
   const prizes = (slideDrawState.prizes ?? [])
     .flatMap((prize) =>
       Array.from({ length: Math.max(0, prize.rankTo - prize.rankFrom + 1) }, (_, i) => ({
@@ -370,16 +445,28 @@ function finalizeSlideDraw() {
       })),
     )
     .sort((a, b) => a.rank - b.rank)
-  const pool = [...entries]
+  const pool = [...sortedEntries]
   const winningLogs: Array<{ rank: number; winningNumber: number; fullName: string; userId: string; prize: SlidePrizeMock }> = []
   const winners: Array<{ rank: number; fullName: string; winningNumber: number; prize: { title: string; amount?: number } }> = []
+  const revealedServerSeed = slideServerSeeds[slideDrawState.id] ?? secureRandomHex(64)
+  slideServerSeeds[slideDrawState.id] = revealedServerSeed
+  const participantsHash = `0x${deterministicHashHex(
+    sortedEntries
+      .map((item) => `${item.userId}:${item.entryNumber}`)
+      .join("|") || "empty",
+    8,
+  )}`
+  const externalEntropy = `hour:${new Date(slideDrawState.scheduledAt).toISOString()}|nonce:${secureRandomHex(16)}`
+  const fairnessBase = `${revealedServerSeed}|${externalEntropy}|${participantsHash}|${slideDrawState.id}`
+  let turn = 0
 
   for (const slot of prizes) {
     if (!pool.length) break
-    const idx = Math.floor(Math.random() * pool.length)
+    const idx = numberFromEntropy(`${fairnessBase}|rank:${slot.rank}|pool:${pool.length}|turn:${turn}`, 0, pool.length - 1)
     const win = pool.splice(idx, 1)[0]
     winningLogs.push({ rank: slot.rank, winningNumber: win.entryNumber, fullName: win.fullName, userId: win.userId, prize: slot.prize })
     winners.push({ rank: slot.rank, fullName: win.fullName, winningNumber: win.entryNumber, prize: { title: slot.prize.title, amount: slot.prize.amount } })
+    turn += 1
   }
 
   slideDrawState.status = "drawn"
@@ -388,18 +475,47 @@ function finalizeSlideDraw() {
   slideDrawState.entries = entries
   slideDrawState.targetNumber =
     winningLogs[0]?.winningNumber ??
-    entries[Math.floor(Math.random() * Math.max(1, entries.length))]?.entryNumber ??
-    Math.floor(Math.random() * 99999) + 1
+    numberFromEntropy(`${fairnessBase}|fallback-winner`, SLIDE_NUMBER_MIN, SLIDE_NUMBER_MAX)
   slideDrawState.updatedAt = new Date().toISOString()
   slideDrawState.proof = {
-    algorithm: "SHA-512 + entropy",
+    algorithm: "commit-reveal-hourly-v1",
     seedCommitHash: String(slideDrawState.seedCommitHash ?? ""),
-    revealedServerSeed: pickHash(64),
-    externalEntropy: `${Date.now()}-${pickHash(16)}`,
-    participantsHash: pickHash(64),
+    revealedServerSeed,
+    externalEntropy,
+    participantsHash,
     generatedAt: new Date().toISOString(),
   }
   slideDrawHistory = [JSON.parse(JSON.stringify(slideDrawState)) as SlideDrawState, ...slideDrawHistory.filter((d) => d.id !== slideDrawState.id)]
+}
+
+function createNextHourlySlideDraw() {
+  const previousDrawId = slideDrawState.id
+  const seedPair = makeSlideSeedCommitPair()
+  const nextDrawId = `draw-${Date.now()}`
+  const inheritedPrizes = Array.isArray(slideDrawState.prizes) ? [...slideDrawState.prizes] : []
+  const inheritedTitle = slideDrawState.title || "قرعه کشی ساعتی ماشین اسلاید"
+  slideDrawState = {
+    id: nextDrawId,
+    status: "scheduled",
+    title: inheritedTitle,
+    scheduledAt: nextTopOfHourIso(),
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+    seedCommitHash: seedPair.seedCommitHash,
+    proof: null,
+    participants: [],
+    prizes: inheritedPrizes,
+    totalEntries: 0,
+    winningLogs: [],
+    winners: [],
+    targetNumber: undefined,
+    entries: [],
+  }
+  slideEntriesByUser = {}
+  slideUsedNumbers = new Set<number>()
+  delete slideServerSeeds[previousDrawId]
+  slideServerSeeds[nextDrawId] = seedPair.revealedServerSeed
+  slideProcessingUntil = 0
 }
 
 function advanceSlideLifecycle(force = false) {
@@ -408,11 +524,20 @@ function advanceSlideLifecycle(force = false) {
   if (slideDrawState.status === "scheduled" && (force || now >= drawTime)) {
     slideDrawState.status = "processing"
     slideDrawState.updatedAt = new Date().toISOString()
-    slideProcessingUntil = now + (force ? 1000 : 7000)
-    if (!slideDrawState.targetNumber) slideDrawState.targetNumber = Math.floor(Math.random() * 99999) + 1
+    slideProcessingUntil = now + (force ? 1000 : SLIDE_PROCESSING_MS)
+    if (!slideDrawState.targetNumber) {
+      slideDrawState.targetNumber = numberFromEntropy(
+        `${slideDrawState.seedCommitHash}|preview|${slideDrawState.id}|${slideDrawState.scheduledAt}`,
+        SLIDE_NUMBER_MIN,
+        SLIDE_NUMBER_MAX,
+      )
+    }
   }
   if (slideDrawState.status === "processing" && (force || now >= slideProcessingUntil)) {
     finalizeSlideDraw()
+  }
+  if (!force && slideDrawState.status === "drawn" && now >= drawTime + SLIDE_RESULT_SETTLE_MS) {
+    createNextHourlySlideDraw()
   }
 }
 
@@ -435,8 +560,8 @@ function ensureSlideParticipant(userId: string) {
 }
 
 function generateSlideNumber() {
-  let candidate = Math.floor(Math.random() * 99999) + 1
-  while (slideUsedNumbers.has(candidate)) candidate = Math.floor(Math.random() * 99999) + 1
+  let candidate = randomSlideChanceNumber()
+  while (slideUsedNumbers.has(candidate)) candidate = randomSlideChanceNumber()
   slideUsedNumbers.add(candidate)
   return candidate
 }
@@ -1427,14 +1552,16 @@ export async function mockApiRequest<T>(
     if (slideDrawState.status === "scheduled" || slideDrawState.status === "processing") {
       throw new MockApiError("ابتدا قرعه فعال فعلی را نهایی یا حذف کنید", 400)
     }
+    const pair = makeSlideSeedCommitPair()
+    const nextDrawId = `draw-${Date.now()}`
     slideDrawState = {
-      id: `draw-${Date.now()}`,
+      id: nextDrawId,
       status: "scheduled",
       title: String(bodyData?.title ?? "قرعه کشی اسلاید"),
-      scheduledAt: String(bodyData?.scheduledAt ?? new Date(Date.now() + 60 * 60 * 1000).toISOString()),
+      scheduledAt: nextTopOfHourIso(bodyData?.scheduledAt),
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
-      seedCommitHash: `0x${pickHash(24)}`,
+      seedCommitHash: pair.seedCommitHash,
       proof: null,
       participants: slideDrawState.participants.map((participant) => ({ ...participant, chances: 0 })),
       prizes: Array.isArray(bodyData?.prizes) ? (bodyData.prizes as SlidePrizeMock[]) : slideDrawState.prizes,
@@ -1446,6 +1573,7 @@ export async function mockApiRequest<T>(
     }
     slideEntriesByUser = {}
     slideUsedNumbers = new Set<number>()
+    slideServerSeeds[nextDrawId] = pair.revealedServerSeed
     slideProcessingUntil = 0
     return { item: slideDrawState } as T
   }
@@ -1454,7 +1582,7 @@ export async function mockApiRequest<T>(
     const drawId = path.split("/")[4]
     if (drawId !== slideDrawState.id) throw new MockApiError("قرعه پیدا نشد", 404)
     slideDrawState.title = String(bodyData?.title ?? slideDrawState.title)
-    slideDrawState.scheduledAt = String(bodyData?.scheduledAt ?? slideDrawState.scheduledAt)
+    slideDrawState.scheduledAt = nextTopOfHourIso(bodyData?.scheduledAt ?? slideDrawState.scheduledAt)
     if (Array.isArray(bodyData?.prizes)) {
       slideDrawState.prizes = bodyData.prizes as SlidePrizeMock[]
     }

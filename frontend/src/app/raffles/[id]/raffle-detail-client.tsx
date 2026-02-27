@@ -64,7 +64,6 @@ export default function RaffleDetailClient({ id }: { id: string }) {
   const [proof, setProof] = useState<ProofResponse | null>(null)
   const [count, setCount] = useState(1)
   const [isBuying, setIsBuying] = useState(false)
-  const router = useRouter()
 
   const walletBalance = user?.walletBalance ?? 0
 
@@ -142,55 +141,6 @@ export default function RaffleDetailClient({ id }: { id: string }) {
       await Promise.all([load(), refreshMe()])
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "خرید ناموفق بود")
-    } finally {
-      setIsBuying(false)
-    }
-  }
-
-  async function buyCardToCard() {
-    if (!raffle) return
-    if (!isAuthenticated) {
-      toast.error("ابتدا وارد حساب شوید")
-      return
-    }
-    if (raffle.status !== "open") {
-      toast.error("این قرعه کشی باز نیست")
-      return
-    }
-    if (!/^\d{4}$/.test(fromCardLast4)) {
-      toast.error("۴ رقم آخر کارت نامعتبر است")
-      return
-    }
-    if (trackingCode.trim().length < 4) {
-      toast.error("کد پیگیری نامعتبر است")
-      return
-    }
-    if (!receiptFile) {
-      toast.error("تصویر رسید را انتخاب کنید")
-      return
-    }
-
-    setIsBuying(true)
-    try {
-      const receiptImageUrl = await uploadUserImage(receiptFile)
-      await apiRequest<BuyResponse>(`/raffles/${raffle.id}/buy`, {
-        method: "POST",
-        headers: { "Idempotency-Key": randomIdempotencyKey() },
-        body: JSON.stringify({
-          count,
-          paymentMethod: "CARD_TO_CARD",
-          fromCardLast4,
-          trackingCode: trackingCode.trim(),
-          receiptImageUrl,
-        }),
-      })
-      toast.success("رسید شما ثبت شد و پس از تایید ادمین، بلیط صادر می‌شود")
-      setReceiptFile(null)
-      setFromCardLast4("")
-      setTrackingCode("")
-      await Promise.all([load(), refreshMe()])
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "ارسال رسید ناموفق بود")
     } finally {
       setIsBuying(false)
     }

@@ -2,9 +2,9 @@
 
 import { useEffect, useState } from "react"
 import toast from "react-hot-toast"
-import { apiRequest, getAccessToken } from "@/lib/api"
+import { apiRequest, getAccessToken, LIVE_WS_URL } from "@/lib/api"
 
-const WS_URL = process.env.NEXT_PUBLIC_WS_URL ?? "ws://localhost:4000/api/v1/live"
+const WS_URL = LIVE_WS_URL
 
 type Ticket = {
   id: string

@@ -3,9 +3,11 @@
 import { ReactNode } from "react"
 import { Toaster } from "react-hot-toast"
 import { AuthProvider } from "@/lib/auth-context"
+import { SiteSettingsProvider } from "@/lib/site-settings-context"
 
 export function Providers({ children }: { children: ReactNode }) {
   return (
+    <SiteSettingsProvider>
     <AuthProvider>
       {children}
       <Toaster
@@ -20,5 +22,6 @@ export function Providers({ children }: { children: ReactNode }) {
         }}
       />
     </AuthProvider>
+    </SiteSettingsProvider>
   )
 }

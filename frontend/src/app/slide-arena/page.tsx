@@ -5,12 +5,13 @@ import toast from "react-hot-toast"
 import { motion, AnimatePresence } from "framer-motion"
 import { apiRequest } from "@/lib/api"
 import { useAuth } from "@/lib/auth-context"
+import { formatToman } from "@/lib/money"
 import { Dice1, Users, Zap, Wallet, Lock, BarChart3 } from "lucide-react"
 
 type SingleToday = {
   date: string
-  hasTarget: boolean
-  targetNumber?: number
+  mode?: "random"
+  winProbabilityPercent?: number
 }
 
 type BattleRoom = {
@@ -158,7 +159,7 @@ export default function SlideArenaPage() {
 
         {/* Tabs */}
         <div className="flex gap-2 sm:gap-3 mb-6 flex-wrap">
-          {["single", "battle"].map((tab) => (
+              {["single", "battle"].map((tab) => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab as "single" | "battle")}
@@ -169,7 +170,7 @@ export default function SlideArenaPage() {
               }`}
             >
               {tab === "single" ? <Zap className="w-4 h-4" /> : <Users className="w-4 h-4" />}
-              {tab === "single" ? "قرعه روزانه" : "تالار پنج نفر"}
+              {tab === "single" ? "قرعه روزانه" : "تالار ۱۰ نفر"}
             </button>
           ))}
         </div>
@@ -187,22 +188,20 @@ export default function SlideArenaPage() {
                         <Zap className="w-5 h-5 text-accent-gold" />
                         قرعه روزانه
                       </h2>
-                      <p className="text-xs sm:text-sm text-white/60">رقم هدف را حدس بزنید</p>
+                      <p className="text-xs sm:text-sm text-white/60">کاملا رندوم - بدون عدد هدف دستی</p>
                     </div>
 
-                    {/* Target Number */}
-                    {today?.hasTarget && (
-                      <motion.div
-                        initial={{ scale: 0.8, opacity: 0 }}
-                        animate={{ scale: 1, opacity: 1 }}
-                        className="mb-6 p-4 sm:p-5 rounded-xl bg-gradient-to-br from-accent-gold/20 to-accent-cyan/20 border border-accent-gold/30"
-                      >
-                        <p className="text-white/70 text-xs font-bold mb-2">رقم امروز</p>
-                        <p className="text-4xl sm:text-5xl font-black text-accent-gold">
-                          {today?.targetNumber ?? "-"}
-                        </p>
-                      </motion.div>
-                    )}
+                    <motion.div
+                      initial={{ scale: 0.98, opacity: 0 }}
+                      animate={{ scale: 1, opacity: 1 }}
+                      className="mb-6 p-4 sm:p-5 rounded-xl bg-gradient-to-br from-accent-gold/10 to-accent-cyan/10 border border-accent-gold/20"
+                    >
+                      <p className="text-white/70 text-xs font-bold mb-1">حالت بازی</p>
+                      <p className="text-sm font-black text-accent-gold">Fully Random</p>
+                      <p className="text-xs text-white/60 mt-1">
+                        شانس برد هر دور: {(today?.winProbabilityPercent ?? 1).toLocaleString("fa-IR")}%
+                      </p>
+                    </motion.div>
 
                     {/* Buttons */}
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-5">
@@ -256,15 +255,15 @@ export default function SlideArenaPage() {
                               <p className="font-bold text-accent-gold">{singleResult.rolledNumber ?? singleResult.position ?? "-"}</p>
                             </div>
                             <div className="bg-white/5 rounded-lg p-2">
-                              <p className="text-white/60 mb-1">رقم</p>
-                              <p className="font-bold text-accent-cyan">{singleResult.targetNumber ?? today?.targetNumber ?? "-"}</p>
+                              <p className="text-white/60 mb-1">عدد برنده این دور</p>
+                              <p className="font-bold text-accent-cyan">{singleResult.winningNumber ?? singleResult.targetNumber ?? "-"}</p>
                             </div>
                           </div>
 
                           {singleResult.reward && (
                             <div className="mt-3 p-2 bg-accent-gold/20 rounded-lg text-xs">
                               <p className="text-white/70 mb-1">جایزه</p>
-                              <p className="font-bold text-accent-gold">{Number(singleResult.reward).toLocaleString("fa-IR")} 💰</p>
+                              <p className="font-bold text-accent-gold">{formatToman(Number(singleResult.reward))} 💰</p>
                             </div>
                           )}
                         </motion.div>
@@ -283,7 +282,7 @@ export default function SlideArenaPage() {
                     <div className="space-y-2">
                       <div className="bg-white/5 rounded-lg p-3 border border-white/10">
                         <p className="text-white/60 text-xs mb-1">تومان</p>
-                        <p className="text-lg sm:text-xl font-bold text-accent-gold">{user?.walletBalance?.toLocaleString("fa-IR") ?? "0"}</p>
+                        <p className="text-lg sm:text-xl font-bold text-accent-gold">{formatToman(user?.walletBalance ?? 0)}</p>
                       </div>
                       <div className="bg-white/5 rounded-lg p-3 border border-white/10">
                         <p className="text-white/60 text-xs mb-1">سهم شانس</p>
@@ -305,10 +304,10 @@ export default function SlideArenaPage() {
               <div className="rounded-2xl border border-white/10 bg-gradient-to-br from-white/5 to-white/[0.02] backdrop-blur-xl p-5 sm:p-6 mb-6">
                 <h2 className="text-lg sm:text-xl font-bold mb-2 flex items-center gap-2">
                   <Users className="w-5 h-5 text-accent-cyan" />
-                  تالار پنج نفر
+                  تالار ۱۰ نفر
                 </h2>
                 <p className="text-xs sm:text-sm text-white/60 mb-4">
-                  با هم بازی کنید، برنده همه پول را می‌برد
+                  با هم بازی کنید، برنده پس از کسر کارمزد سایت جایزه را دریافت می‌کند
                 </p>
 
                 {/* Quick Join Buttons */}
@@ -335,7 +334,7 @@ export default function SlideArenaPage() {
                   >
                     <div className="flex items-center justify-center gap-1.5">
                       <Wallet className="w-4 h-4" />
-                      ۵۰ هزار تومان
+                      ۱۰ هزار تومان
                     </div>
                   </motion.button>
                 </div>

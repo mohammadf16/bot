@@ -1,7 +1,8 @@
-﻿import type { Metadata, Viewport } from "next"
+import type { Metadata, Viewport } from "next"
 import { Providers } from "@/components/providers"
 import { Header } from "@/components/layout/header"
 import { Footer } from "@/components/layout/footer"
+import { MobileBottomNav } from "@/components/layout/mobile-bottom-nav"
 import "./globals.css"
 
 const basePath = process.env.NEXT_PUBLIC_BASE_PATH ?? ""
@@ -32,8 +33,9 @@ export default function RootLayout({
       <body>
         <Providers>
           <Header />
-          <main>{children}</main>
+          <main className="min-h-screen pb-24 md:pb-0">{children}</main>
           <Footer />
+          <MobileBottomNav />
         </Providers>
       </body>
     </html>

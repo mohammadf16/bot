@@ -59,6 +59,7 @@ export async function registerDatabaseStatusRoutes({ app, store }: RouteContext)
       autoLoans: store.autoLoans.size,
       showroomVehicles: store.showroomVehicles.size,
       showroomOrders: store.showroomOrders.size,
+      checkListings: store.checkListings.size,
       supportTickets: store.supportTickets.size,
       supportMessages: store.supportMessages.size,
       riskSignals: store.riskSignals.size,

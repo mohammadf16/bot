@@ -6,20 +6,48 @@ import {
   RAFFLE_COMBO_PACKAGES,
   type RaffleComboCode,
 } from "../services/pricing.js"
+import { createCardToCardPayment } from "../services/card-to-card-payments.js"
 import { pushAudit, pushLiveEvent } from "../services/events.js"
 import { id } from "../utils/id.js"
 import { nowIso } from "../utils/time.js"
 import { verifyProof } from "../security/lottery.js"
 import { pushUserNotification } from "../services/notifications.js"
 
+function getLinkedVehicle(store: RouteContext["store"], linkedVehicleId?: string) {
+  if (!linkedVehicleId) return undefined
+  const v = store.showroomVehicles.get(linkedVehicleId)
+  if (!v) return undefined
+  const d = v.vehicle
+  const imgs = Array.isArray(d["imageUrls"]) ? (d["imageUrls"] as string[]) : []
+  const pi = Math.max(0, Math.min(imgs.length - 1, Number(d["primaryImageIndex"] ?? 0)))
+  return {
+    id: v.id,
+    title: String(d["title"] ?? ""),
+    imageUrl: imgs[pi] ?? String(d["imageUrl"] ?? ""),
+    model: String(d["model"] ?? d["title"] ?? ""),
+    year: Number(d["year"] ?? 0),
+    city: String(d["city"] ?? ""),
+    status: v.status,
+    listedPriceIrr: v.listedPriceIrr,
+  }
+}
+
 const buySchema = z.object({
   count: z.number().int().min(1).max(20),
   clientSeed: z.string().min(8).max(128).optional(),
+  paymentMethod: z.enum(["WALLET", "CARD_TO_CARD"]).optional(),
+  fromCardLast4: z.string().trim().regex(/^\d{4}$/).optional(),
+  trackingCode: z.string().trim().min(4).max(64).optional(),
+  receiptImageUrl: z.string().trim().url().max(2048).optional(),
 })
 
 const buyComboSchema = z.object({
   code: z.enum(["silver", "gold"]),
   clientSeed: z.string().min(8).max(128).optional(),
+  paymentMethod: z.enum(["WALLET", "CARD_TO_CARD"]).optional(),
+  fromCardLast4: z.string().trim().regex(/^\d{4}$/).optional(),
+  trackingCode: z.string().trim().min(4).max(64).optional(),
+  receiptImageUrl: z.string().trim().url().max(2048).optional(),
 })
 
 function ensureUserStats(user: {
@@ -129,17 +157,34 @@ function applyReferralCommissions(
   })
 }
 
+function generateUniqueSlideNumbers(store: RouteContext["store"], count: number): number[] {
+  const existing = new Set<number>()
+  for (const t of store.tickets.values()) {
+    if (t.slideNumber) existing.add(t.slideNumber)
+  }
+  const out: number[] = []
+  while (out.length < count) {
+    const n = 100_000 + Math.floor(Math.random() * 900_000)
+    if (existing.has(n)) continue
+    existing.add(n)
+    out.push(n)
+  }
+  return out
+}
+
 function createTickets(args: {
   raffleId: string
   userId: string
   startIndex: number
   prices: number[]
+  slideNumbers: number[]
   clientSeed?: string
 }): Array<{
   id: string
   raffleId: string
   userId: string
   index: number
+  slideNumber: number
   pricePaid: number
   clientSeed: string
   createdAt: string
@@ -151,6 +196,7 @@ function createTickets(args: {
       raffleId: args.raffleId,
       userId: args.userId,
       index,
+      slideNumber: args.slideNumbers[i] ?? (100_000 + i),
       pricePaid: price,
       clientSeed: args.clientSeed ?? `${args.userId}-${index}-${Date.now()}`,
       createdAt: nowIso(),
@@ -179,15 +225,20 @@ export async function registerRaffleRoutes(ctx: RouteContext): Promise<void> {
           status: r.status,
           maxTickets: r.maxTickets,
           ticketsSold: r.ticketsSold,
+          participantsCount: r.participantsCount ?? new Set(store.getTicketsByRaffle(r.id).map((ticket) => ticket.userId)).size,
           seedCommitHash: r.seedCommitHash,
           openedAt: r.openedAt,
           closedAt: r.closedAt,
           drawnAt: r.drawnAt,
-          dynamicPricing: {
-            basePrice: 1_000_000,
-            decayFactor: 0.8,
-            minPrice: 500_000,
+          dynamicPricing: r.dynamicPricing ?? { basePrice: 1_000_000, decayFactor: 0.8, minPrice: 500_000 },
+          rewardConfig: r.rewardConfig ?? {
+            cashbackPercent: r.config.cashbackPercent,
+            cashbackToGoldPercent: 30,
+            tomanPerGoldSot: 100_000,
+            mainPrizeTitle: "جایزه اصلی خودرو",
+            mainPrizeValueIrr: 0,
           },
+          linkedVehicle: getLinkedVehicle(store, r.linkedVehicleId),
           comboPackages: Object.values(RAFFLE_COMBO_PACKAGES),
         })),
     }
@@ -204,15 +255,20 @@ export async function registerRaffleRoutes(ctx: RouteContext): Promise<void> {
       status: raffle.status,
       maxTickets: raffle.maxTickets,
       ticketsSold: raffle.ticketsSold,
+      participantsCount: raffle.participantsCount ?? new Set(store.getTicketsByRaffle(raffle.id).map((ticket) => ticket.userId)).size,
       seedCommitHash: raffle.seedCommitHash,
       tiers: raffle.tiers,
       config: raffle.config,
-      dynamicPricing: {
-        basePrice: 1_000_000,
-        decayFactor: 0.8,
-        minPrice: 500_000,
+      dynamicPricing: raffle.dynamicPricing ?? { basePrice: 1_000_000, decayFactor: 0.8, minPrice: 500_000 },
+      rewardConfig: raffle.rewardConfig ?? {
+        cashbackPercent: raffle.config.cashbackPercent,
+        cashbackToGoldPercent: 30,
+        tomanPerGoldSot: 100_000,
+        mainPrizeTitle: "جایزه اصلی خودرو",
+        mainPrizeValueIrr: 0,
       },
       comboPackages: Object.values(RAFFLE_COMBO_PACKAGES),
+      linkedVehicle: getLinkedVehicle(store, raffle.linkedVehicleId),
       openedAt: raffle.openedAt,
       closedAt: raffle.closedAt,
       drawnAt: raffle.drawnAt,
@@ -248,26 +304,69 @@ export async function registerRaffleRoutes(ctx: RouteContext): Promise<void> {
     const alreadyBought = getPurchasedCountByUser(store, raffle.id, user.id)
     const prices = calculateDynamicTicketPrices(count, alreadyBought)
     const totalPaid = prices.reduce((a, b) => a + b, 0)
+    const paymentMethod = parsed.data.paymentMethod ?? "WALLET"
+    recalculateVip(user)
+    const effectiveCashbackPercent = Math.max(raffle.config.cashbackPercent, user.vipCashbackPercent ?? 20)
+    const cashback = calculateCashback(totalPaid, { ...raffle.config, cashbackPercent: effectiveCashbackPercent })
+
+    if (paymentMethod === "CARD_TO_CARD") {
+      if (!parsed.data.fromCardLast4 || !parsed.data.trackingCode || !parsed.data.receiptImageUrl) {
+        return reply.code(400).send({ error: "CARD_TO_CARD_RECEIPT_REQUIRED" })
+      }
+      const payment = createCardToCardPayment(store, {
+        userId: user.id,
+        userEmail: user.email,
+        amount: totalPaid,
+        purpose: "raffle_ticket_purchase",
+        fromCardLast4: parsed.data.fromCardLast4,
+        trackingCode: parsed.data.trackingCode,
+        receiptImageUrl: parsed.data.receiptImageUrl,
+        metadata: {
+          raffleId: raffle.id,
+          ticketCount: count,
+          ticketPrices: prices,
+          totalPaid,
+          cashback,
+          wheelChanceGain: count * raffle.config.wheelChancePerTicket,
+          clientSeed: parsed.data.clientSeed ?? "",
+        },
+      })
+      const response = {
+        ok: true,
+        status: "pending",
+        paymentId: payment.id,
+        amount: totalPaid,
+        destinationCard: payment.destinationCard,
+      }
+      if (idempotencyKey) store.idempotency.set(`${user.id}:raffle-buy:${idempotencyKey}`, response)
+      pushUserNotification(store, {
+        userId: user.id,
+        title: "پرداخت کارت به کارت ثبت شد",
+        body: "رسید خرید بلیط ثبت شد و پس از تایید ادمین، بلیط‌ها صادر می‌شوند.",
+        kind: "info",
+      })
+      return response
+    }
+
     if (user.walletBalance < totalPaid) {
       return reply.code(400).send({ error: "INSUFFICIENT_BALANCE", required: totalPaid, current: user.walletBalance })
     }
 
     const baseIndex = raffle.ticketsSold
+    const slideNumbers = generateUniqueSlideNumbers(store, count)
     const tickets = createTickets({
       raffleId: raffle.id,
       userId: user.id,
       startIndex: baseIndex,
       prices,
+      slideNumbers,
       clientSeed: parsed.data.clientSeed,
     })
 
     for (const t of tickets) store.tickets.set(t.id, t)
 
-    recalculateVip(user)
-    const effectiveCashbackPercent = Math.max(raffle.config.cashbackPercent, user.vipCashbackPercent ?? 20)
-    const cashback = calculateCashback(totalPaid, { ...raffle.config, cashbackPercent: effectiveCashbackPercent })
-
     raffle.ticketsSold += count
+    raffle.participantsCount = new Set(store.getTicketsByRaffle(raffle.id).map((ticket) => ticket.userId)).size
     raffle.updatedAt = nowIso()
     store.raffles.set(raffle.id, raffle)
 
@@ -310,6 +409,7 @@ export async function registerRaffleRoutes(ctx: RouteContext): Promise<void> {
       ok: true,
       raffleId: raffle.id,
       ticketIds: tickets.map((t) => t.id),
+      slideNumbers: tickets.map((t) => t.slideNumber),
       ticketsBought: count,
       totalPaid,
       ticketPrices: prices,
@@ -317,6 +417,13 @@ export async function registerRaffleRoutes(ctx: RouteContext): Promise<void> {
       balanceAfter: user.walletBalance,
       chancesAfter: user.chances,
       pity: pityState,
+      rewardConfig: raffle.rewardConfig ?? {
+        cashbackPercent: effectiveCashbackPercent,
+        cashbackToGoldPercent: 30,
+        tomanPerGoldSot: 100_000,
+        mainPrizeTitle: "جایزه اصلی خودرو",
+        mainPrizeValueIrr: 0,
+      },
       vip: {
         levelId: user.vipLevelId,
         levelName: user.vipLevelName,
@@ -374,28 +481,73 @@ export async function registerRaffleRoutes(ctx: RouteContext): Promise<void> {
     const giftPrices = Array.from({ length: giftCount }, () => 0)
     const prices = [...paidPrices, ...giftPrices]
     const totalPaid = paidPrices.reduce((a, b) => a + b, 0)
+    const paymentMethod = parsed.data.paymentMethod ?? "WALLET"
+    recalculateVip(user)
+    const effectiveCashbackPercent = Math.max(raffle.config.cashbackPercent, user.vipCashbackPercent ?? 20)
+    const cashback = calculateCashback(totalPaid, { ...raffle.config, cashbackPercent: effectiveCashbackPercent })
+
+    if (paymentMethod === "CARD_TO_CARD") {
+      if (!parsed.data.fromCardLast4 || !parsed.data.trackingCode || !parsed.data.receiptImageUrl) {
+        return reply.code(400).send({ error: "CARD_TO_CARD_RECEIPT_REQUIRED" })
+      }
+      const payment = createCardToCardPayment(store, {
+        userId: user.id,
+        userEmail: user.email,
+        amount: totalPaid,
+        purpose: "raffle_combo_purchase",
+        fromCardLast4: parsed.data.fromCardLast4,
+        trackingCode: parsed.data.trackingCode,
+        receiptImageUrl: parsed.data.receiptImageUrl,
+        metadata: {
+          raffleId: raffle.id,
+          packageCode: combo.code,
+          paidTickets: paidCount,
+          bonusTickets: giftCount,
+          totalTickets: totalCount,
+          ticketPrices: prices,
+          totalPaid,
+          cashback,
+          bonusChances: combo.bonusChances,
+          wheelChanceGain: totalCount * raffle.config.wheelChancePerTicket,
+          vipDays: combo.vipDays,
+          clientSeed: parsed.data.clientSeed ?? "",
+        },
+      })
+      pushUserNotification(store, {
+        userId: user.id,
+        title: "پرداخت کارت به کارت ثبت شد",
+        body: "رسید پکیج بلیط ثبت شد و پس از تایید ادمین، خرید نهایی می‌شود.",
+        kind: "info",
+      })
+      return {
+        ok: true,
+        status: "pending",
+        paymentId: payment.id,
+        amount: totalPaid,
+        destinationCard: payment.destinationCard,
+      }
+    }
 
     if (user.walletBalance < totalPaid) {
       return reply.code(400).send({ error: "INSUFFICIENT_BALANCE", required: totalPaid, current: user.walletBalance })
     }
 
     const baseIndex = raffle.ticketsSold
+    const slideNumbersCombo = generateUniqueSlideNumbers(store, totalCount)
     const tickets = createTickets({
       raffleId: raffle.id,
       userId: user.id,
       startIndex: baseIndex,
       prices,
+      slideNumbers: slideNumbersCombo,
       clientSeed: parsed.data.clientSeed,
     })
     for (const t of tickets) store.tickets.set(t.id, t)
 
     raffle.ticketsSold += totalCount
+    raffle.participantsCount = new Set(store.getTicketsByRaffle(raffle.id).map((ticket) => ticket.userId)).size
     raffle.updatedAt = nowIso()
     store.raffles.set(raffle.id, raffle)
-
-    recalculateVip(user)
-    const effectiveCashbackPercent = Math.max(raffle.config.cashbackPercent, user.vipCashbackPercent ?? 20)
-    const cashback = calculateCashback(totalPaid, { ...raffle.config, cashbackPercent: effectiveCashbackPercent })
 
     user.walletBalance -= totalPaid
     user.walletBalance += cashback
@@ -443,6 +595,7 @@ export async function registerRaffleRoutes(ctx: RouteContext): Promise<void> {
       package: combo,
       raffleId: raffle.id,
       ticketIds: tickets.map((t) => t.id),
+      slideNumbers: tickets.map((t) => t.slideNumber),
       paidTickets: paidCount,
       bonusTickets: giftCount,
       totalTickets: totalCount,

@@ -2,6 +2,7 @@
 
 import { useState } from "react"
 import { Calculator, Zap, Ticket, Gift, TrendingDown, Wallet } from "lucide-react"
+import { formatMoneyInput, formatToman, parseBoundedIntInput } from "@/lib/money"
 
 export default function CalculatorPage() {
   const [tickets, setTickets] = useState(1)
@@ -51,10 +52,11 @@ export default function CalculatorPage() {
                   onClick={() => setTickets(Math.max(1, tickets - 1))}
                   className="w-14 h-14 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center text-2xl hover:bg-white/10 transition-colors"
                 >-</button>
-                <input 
-                  type="number" 
-                  value={tickets}
-                  onChange={(e) => setTickets(Math.max(1, parseInt(e.target.value) || 1))}
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  value={formatMoneyInput(String(tickets))}
+                  onChange={(e) => setTickets(parseBoundedIntInput(e.target.value, { min: 1 }) ?? 1)}
                   className="flex-1 bg-white/5 border border-white/10 rounded-2xl p-4 text-center text-3xl font-black focus:border-accent-gold outline-none transition-colors"
                 />
                 <button 
@@ -82,7 +84,7 @@ export default function CalculatorPage() {
             <Ticket className="text-accent-gold w-8 h-8 mb-4" />
             <div>
               <p className="text-white/40 text-xs font-bold uppercase mb-1">مبلغ کل خرید</p>
-              <h3 className="text-2xl font-black text-white">{total.toLocaleString("fa-IR")} <span className="text-[10px] opacity-40">تومان</span></h3>
+              <h3 className="text-2xl font-black text-white">{formatToman(total)} <span className="text-[10px] opacity-40">تومان</span></h3>
             </div>
           </div>
 
@@ -90,7 +92,7 @@ export default function CalculatorPage() {
             <Gift className="text-accent-cyan w-8 h-8 mb-4" />
             <div>
               <p className="text-accent-cyan/60 text-xs font-bold uppercase mb-1">کش‌بک دریافتی</p>
-              <h3 className="text-2xl font-black text-accent-cyan">{cashback.toLocaleString("fa-IR")} <span className="text-[10px] opacity-40">تومان</span></h3>
+              <h3 className="text-2xl font-black text-accent-cyan">{formatToman(cashback)} <span className="text-[10px] opacity-40">تومان</span></h3>
             </div>
           </div>
 
@@ -106,7 +108,7 @@ export default function CalculatorPage() {
             <Wallet className="text-emerald-500 w-8 h-8 mb-4" />
             <div>
               <p className="text-emerald-500/60 text-xs font-bold uppercase mb-1">هزینه واقعی شما</p>
-              <h3 className="text-2xl font-black text-emerald-500">{(total - cashback).toLocaleString("fa-IR")} <span className="text-[10px] opacity-40">تومان</span></h3>
+              <h3 className="text-2xl font-black text-emerald-500">{formatToman(total - cashback)} <span className="text-[10px] opacity-40">تومان</span></h3>
             </div>
           </div>
         </div>

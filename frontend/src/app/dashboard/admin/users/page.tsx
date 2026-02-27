@@ -3,6 +3,7 @@
 import { motion } from "framer-motion"
 import { Search, Filter, MoreVertical, User, Mail, Phone, AlertCircle, CheckCircle2, Ban, UserPlus, Download, Settings } from "lucide-react"
 import { useState } from "react"
+import { formatToman } from "@/lib/money"
 
 export default function AdminUsersPage() {
   const [searchTerm, setSearchTerm] = useState("")
@@ -255,7 +256,7 @@ export default function AdminUsersPage() {
                     </td>
                     <td className="p-6">
                       <div className="text-right">
-                        <p className="font-bold">{user.balance.toLocaleString()}</p>
+                        <p className="font-bold">{formatToman(user.balance)}</p>
                         <p className="text-xs text-white/40">تومان</p>
                       </div>
                     </td>

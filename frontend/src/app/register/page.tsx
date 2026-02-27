@@ -1,4 +1,4 @@
-"use client"
+﻿"use client"
 
 import { FormEvent, useEffect, useState } from "react"
 import Link from "next/link"
@@ -12,6 +12,7 @@ export default function RegisterPage() {
   const { register, isAuthenticated, isLoading } = useAuth()
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
+  const [phone, setPhone] = useState("")
   const [referralCode, setReferralCode] = useState("")
   const [loading, setLoading] = useState(false)
 
@@ -32,7 +33,7 @@ export default function RegisterPage() {
     e.preventDefault()
     setLoading(true)
     try {
-      await register({ email, password, referralCode: referralCode || undefined })
+      await register({ email, password, phone, referralCode: referralCode || undefined })
       toast.success("ثبت نام انجام شد. حالا وارد شوید.")
       router.replace("/")
     } catch (err) {
@@ -47,7 +48,7 @@ export default function RegisterPage() {
       <div className="max-w-md mx-auto px-4" dir="rtl">
         <div className="card glass p-8">
           <h1 className="text-3xl font-black mb-2">ثبت نام</h1>
-          <p className="text-sm text-dark-text/60 mb-6">عضو پلتفرم شوید و به قرعه کشی، کیف پول و بازی‌ها دسترسی بگیرید.</p>
+          <p className="text-sm text-dark-text/60 mb-6">عضو پلتفرم شوید و به قرعه کشی، کیف پول و بازی ها دسترسی بگیرید.</p>
 
           <form onSubmit={onSubmit} className="space-y-4">
             <div>
@@ -61,13 +62,24 @@ export default function RegisterPage() {
               />
             </div>
             <div>
-              <label className="block text-sm text-dark-text/70 mb-2">رمز عبور (حداقل ۱۰ کاراکتر)</label>
+              <label className="block text-sm text-dark-text/70 mb-2">رمز عبور (حداقل 10 کاراکتر)</label>
               <input
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 className="w-full bg-dark-bg/50 border border-dark-border/40 rounded-xl px-4 py-3"
                 minLength={10}
+                required
+              />
+            </div>
+            <div>
+              <label className="block text-sm text-dark-text/70 mb-2">شماره تلفن</label>
+              <input
+                type="tel"
+                value={phone}
+                onChange={(e) => setPhone(e.target.value)}
+                className="w-full bg-dark-bg/50 border border-dark-border/40 rounded-xl px-4 py-3"
+                placeholder="09123456789 یا +989123456789"
                 required
               />
             </div>

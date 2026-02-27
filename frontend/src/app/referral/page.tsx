@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react"
 import { apiRequest } from "@/lib/api"
 import toast from "react-hot-toast"
+import { formatToman } from "@/lib/money"
 
 type ReferralData = {
   referralCode: string
@@ -44,7 +45,7 @@ export default function ReferralLandingPage() {
             <div className="p-3 rounded-lg border border-white/10 bg-black/20">سطح ۲: {data?.depthBreakdown.level2 ?? 0}</div>
             <div className="p-3 rounded-lg border border-white/10 bg-black/20">سطح ۳: {data?.depthBreakdown.level3 ?? 0}</div>
           </div>
-          <p className="text-sm">درآمد کمیسیون: {data?.cashbackFromReferrals?.toLocaleString("fa-IR") ?? 0} تومان</p>
+          <p className="text-sm">درآمد کمیسیون: {formatToman(data?.cashbackFromReferrals ?? 0)} تومان</p>
           <div className="max-h-[280px] overflow-y-auto space-y-2">
             {data?.referralTree.map((n) => (
               <div key={`${n.userId}-${n.depth}`} className="p-3 rounded-lg border border-white/10 bg-black/20 text-sm">

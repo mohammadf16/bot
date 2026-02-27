@@ -12,6 +12,10 @@ export async function registerStorePersistence(
   app: FastifyInstance,
   store: AppStore
 ): Promise<StorePersistence | null> {
+  if (env.NODE_ENV === "production" && !env.MYSQL_ENABLED) {
+    throw new Error("MYSQL_REQUIRED_IN_PRODUCTION")
+  }
+
   if (!env.MYSQL_ENABLED) {
     app.log.warn("MySQL persistence is disabled (MYSQL_ENABLED=false)")
     return null

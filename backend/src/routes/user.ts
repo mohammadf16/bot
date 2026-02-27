@@ -1,4 +1,4 @@
-import type { RouteContext } from "../route-context.js"
+﻿import type { RouteContext } from "../route-context.js"
 import { z } from "zod"
 import { pushAudit } from "../services/events.js"
 
@@ -102,23 +102,42 @@ export async function registerUserRoutes({ app, store }: RouteContext): Promise<
     const user = store.users.get(request.user.sub)
     if (!user) return { items: [] }
 
-    const items = Array.from(store.tickets.values())
+    const raffleItems = Array.from(store.tickets.values())
       .filter((t) => t.userId === user.id)
       .sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1))
       .map((t) => {
         const raffle = store.raffles.get(t.raffleId)
         return {
           id: t.id,
+          source: "raffle_ticket",
           raffleId: t.raffleId,
           raffleTitle: raffle?.title ?? "قرعه کشی",
           index: t.index,
+          slideNumber: t.slideNumber,
           pricePaid: t.pricePaid,
           raffleStatus: raffle?.status ?? "draft",
           createdAt: t.createdAt,
         }
       })
 
-    return { items }
+    const slideItems = store
+      .getSlideDraws()
+      .flatMap((draw) =>
+        (draw.entries ?? [])
+          .filter((entry) => entry.userId === user.id)
+          .map((entry) => ({
+            id: `sld-${draw.id}-${entry.entryNumber}`,
+            source: "slide_draw_ticket",
+            raffleId: draw.id,
+            raffleTitle: `ماشین اسلاید - ${draw.title}`,
+            index: entry.entryNumber,
+            pricePaid: 0,
+            raffleStatus: draw.status,
+            createdAt: entry.createdAt,
+          })),
+      )
+
+    return { items: [...raffleItems, ...slideItems].sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1)) }
   })
 
   app.get("/me/history", { preHandler: [app.authenticate] }, async (request) => {

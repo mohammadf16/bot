@@ -3,6 +3,7 @@
 import { motion } from "framer-motion"
 import { Search, Plus, Edit, Trash2, Eye, Calendar, Users, Ticket, Clock, Award, TrendingUp, Filter } from "lucide-react"
 import { useState } from "react"
+import { formatToman } from "@/lib/money"
 
 export default function AdminRafflesPage() {
   const [searchTerm, setSearchTerm] = useState("")
@@ -205,7 +206,7 @@ export default function AdminRafflesPage() {
             <div className="bg-white/5 border border-white/5 rounded-2xl p-6">
               <div className="flex items-center justify-between mb-2">
                 <Award className="w-6 h-6 text-amber-500" />
-                <span className="text-2xl font-black">{raffles.reduce((sum, r) => sum + (r.soldTickets * r.ticketPrice), 0).toLocaleString()}</span>
+                <span className="text-2xl font-black">{formatToman(raffles.reduce((sum, r) => sum + (r.soldTickets * r.ticketPrice), 0))}</span>
               </div>
               <p className="text-white/40 text-xs">درآمد (تومان)</p>
             </div>
@@ -265,7 +266,7 @@ export default function AdminRafflesPage() {
                 {/* Stats */}
                 <div className="grid grid-cols-2 gap-4 mb-4">
                   <div className="text-center">
-                    <p className="text-lg font-black text-accent-gold">{raffle.ticketPrice.toLocaleString()}</p>
+                    <p className="text-lg font-black text-accent-gold">{formatToman(raffle.ticketPrice)}</p>
                     <p className="text-xs text-white/40">قیمت بلیط</p>
                   </div>
                   <div className="text-center">

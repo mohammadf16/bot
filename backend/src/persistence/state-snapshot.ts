@@ -1,9 +1,13 @@
 import type { AppStore } from "../store/app-store.js"
 import { normalizeWheelConfig } from "../services/wheel-config.js"
+import { DEFAULT_LOAN_CONFIG, normalizeLoanConfig } from "../services/loan-config.js"
+import { normalizePaymentConfig } from "../services/payment-config.js"
 import type {
   Auction,
   AuctionBid,
   AuditLog,
+  CardToCardPayment,
+  CheckListing,
   LiveEvent,
   NotificationItem,
   PricingPolicy,
@@ -15,6 +19,9 @@ import type {
   WalletTransaction,
   WheelConfig,
   WheelSpinRecord,
+  LoanConfig,
+  AutoLoan,
+  PaymentConfig,
 } from "../types.js"
 
 export interface AppStateSnapshot {
@@ -64,34 +71,21 @@ export interface AppStateSnapshot {
     id: string
     vehicleId: string
     buyerUserId: string
-    paymentAsset: "IRR" | "GOLD_SOT" | "LOAN"
+    paymentAsset: "IRR" | "GOLD_SOT" | "LOAN" | "CARD_TO_CARD"
     paymentAmount: number
     loanMonths?: number
     downPaymentIrr?: number
     loanAmountIrr?: number
     monthlyInstallmentIrr?: number
+    slideDrawId?: string
+    slideEntryNumbers?: number[]
     status: "pending" | "paid" | "cancelled" | "completed"
     createdAt: string
     updatedAt: string
   }]>
-  autoLoans: Array<[string, {
-    id: string
-    userId: string
-    principalIrr: number
-    outstandingIrr: number
-    installmentCount?: number
-    monthlyInstallmentIrr?: number
-    interestRateMonthlyPercent?: number
-    totalRepayableIrr?: number
-    purpose?: "cash_credit" | "vehicle_purchase"
-    relatedVehicleId?: string
-    status: "pending" | "approved" | "active" | "repaid" | "rejected" | "defaulted"
-    restrictedUsage: boolean
-    approvedBy?: string
-    createdAt: string
-    updatedAt: string
-    dueAt?: string
-  }]>
+  cardToCardPayments: Array<[string, CardToCardPayment]>
+  checkListings: Array<[string, CheckListing]>
+  autoLoans: Array<[string, AutoLoan]>
   supportTickets: Array<[string, {
     id: string
     userId: string
@@ -251,8 +245,70 @@ export interface AppStateSnapshot {
   termsText: string
   disclaimerText: string
   rulesText: string
+  homeContent: {
+    mobileExperienceTitle: string
+    mobileExperienceDescription: string
+    activeRafflesTitle: string
+    activeRafflesSubtitle: string
+  }
   wheelConfig: WheelConfig
+  loanConfig?: LoanConfig
+  paymentConfig?: PaymentConfig
   gameDifficulty: number
+  seo?: {
+    pages: Array<{
+      id: string
+      path: string
+      title: string
+      description: string
+      keywords: string[]
+      ogTitle?: string
+      ogDescription?: string
+      ogImage?: string
+      twitterCard?: string
+      canonicalUrl?: string
+      status: "active" | "draft"
+      views?: number
+      lastModified: string
+    }>
+    structuredData: Array<{
+      id: string
+      type: "article" | "product" | "organization" | "breadcrumb"
+      pagePath: string
+      data: Record<string, any>
+      status: "active" | "draft"
+    }>
+    robots?: string
+    sitemapVersion?: string
+    robotsUpdated?: string
+    totalBacklinks?: number
+    googleAnalytics?: {
+      gaId: string
+      trackingId: string
+      enabled: boolean
+      savedAt: string
+    }
+    googleSearchConsole?: {
+      propertyId: string
+      verificationCode: string
+      enabled: boolean
+      verifiedAt?: string
+    }
+    backlinks?: Array<{
+      domain: string
+      sourceUrl: string
+      anchorText: string
+      authority: number
+      lastChecked: string
+    }>
+    competitors?: Array<{
+      domain: string
+      backlinks: number
+      trafficEstimate: number
+      authority: number
+      keywords: number
+    }>
+  }
 }
 
 export function createSnapshot(store: AppStore): AppStateSnapshot {
@@ -277,6 +333,8 @@ export function createSnapshot(store: AppStore): AppStateSnapshot {
     battleRooms: Array.from(store.battleRooms.entries()),
     showroomVehicles: Array.from(store.showroomVehicles.entries()),
     showroomOrders: Array.from(store.showroomOrders.entries()),
+    cardToCardPayments: Array.from(store.cardToCardPayments.entries()),
+    checkListings: Array.from(store.checkListings.entries()),
     autoLoans: Array.from(store.autoLoans.entries()),
     supportTickets: Array.from(store.supportTickets.entries()),
     supportMessages: Array.from(store.supportMessages.entries()),
@@ -299,8 +357,12 @@ export function createSnapshot(store: AppStore): AppStateSnapshot {
     termsText: store.termsText,
     disclaimerText: store.disclaimerText,
     rulesText: store.rulesText,
+    homeContent: store.homeContent,
     wheelConfig: store.wheelConfig,
+    loanConfig: store.loanConfig,
+    paymentConfig: store.paymentConfig,
     gameDifficulty: store.gameDifficulty,
+    seo: store.seo,
   }
 }
 
@@ -325,6 +387,8 @@ export function applySnapshot(store: AppStore, snapshot: AppStateSnapshot): void
   store.battleRooms = new Map(snapshot.battleRooms ?? [])
   store.showroomVehicles = new Map(snapshot.showroomVehicles ?? [])
   store.showroomOrders = new Map(snapshot.showroomOrders ?? [])
+  store.cardToCardPayments = new Map(snapshot.cardToCardPayments ?? [])
+  store.checkListings = new Map(snapshot.checkListings ?? [])
   store.autoLoans = new Map(snapshot.autoLoans ?? [])
   store.supportTickets = new Map(snapshot.supportTickets ?? [])
   store.supportMessages = new Map(snapshot.supportMessages ?? [])
@@ -347,6 +411,36 @@ export function applySnapshot(store: AppStore, snapshot: AppStateSnapshot): void
   store.termsText = snapshot.termsText ?? ""
   store.disclaimerText = snapshot.disclaimerText ?? ""
   store.rulesText = snapshot.rulesText
+  store.homeContent = {
+    mobileExperienceTitle: snapshot.homeContent?.mobileExperienceTitle ?? store.homeContent.mobileExperienceTitle,
+    mobileExperienceDescription: snapshot.homeContent?.mobileExperienceDescription ?? store.homeContent.mobileExperienceDescription,
+    activeRafflesTitle: snapshot.homeContent?.activeRafflesTitle ?? store.homeContent.activeRafflesTitle,
+    activeRafflesSubtitle: snapshot.homeContent?.activeRafflesSubtitle ?? store.homeContent.activeRafflesSubtitle,
+  }
   store.wheelConfig = normalizeWheelConfig(snapshot.wheelConfig)
+  store.loanConfig = normalizeLoanConfig(snapshot.loanConfig ?? DEFAULT_LOAN_CONFIG)
+  store.paymentConfig = normalizePaymentConfig(snapshot.paymentConfig ?? store.paymentConfig)
   store.gameDifficulty = snapshot.gameDifficulty ?? 50
+  store.seo = {
+    pages: snapshot.seo?.pages ?? [],
+    structuredData: snapshot.seo?.structuredData ?? [],
+    robots: snapshot.seo?.robots ?? "",
+    sitemapVersion: snapshot.seo?.sitemapVersion ?? "1.0",
+    robotsUpdated: snapshot.seo?.robotsUpdated ?? new Date().toISOString(),
+    totalBacklinks: snapshot.seo?.totalBacklinks ?? 0,
+    googleAnalytics: {
+      gaId: snapshot.seo?.googleAnalytics?.gaId ?? "",
+      trackingId: snapshot.seo?.googleAnalytics?.trackingId ?? "",
+      enabled: snapshot.seo?.googleAnalytics?.enabled ?? false,
+      savedAt: snapshot.seo?.googleAnalytics?.savedAt ?? new Date().toISOString(),
+    },
+    googleSearchConsole: {
+      propertyId: snapshot.seo?.googleSearchConsole?.propertyId ?? "",
+      verificationCode: snapshot.seo?.googleSearchConsole?.verificationCode ?? "",
+      enabled: snapshot.seo?.googleSearchConsole?.enabled ?? false,
+      verifiedAt: snapshot.seo?.googleSearchConsole?.verifiedAt,
+    },
+    backlinks: snapshot.seo?.backlinks ?? [],
+    competitors: snapshot.seo?.competitors ?? [],
+  }
 }

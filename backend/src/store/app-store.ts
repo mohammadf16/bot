@@ -3,19 +3,28 @@ import type {
   Auction,
   AuctionBid,
   AuditLog,
+  BlogPost,
+  CardToCardPayment,
+  CheckListing,
   LiveEvent,
   NotificationItem,
   PricingPolicy,
   Raffle,
   RefreshSession,
   SlideDraw,
+  SiteSettings,
   Ticket,
   User,
   WalletTransaction,
   WheelSpinRecord,
   WheelConfig,
+  LoanConfig,
+  AutoLoan,
+  PaymentConfig,
 } from "../types.js"
 import { createDefaultWheelConfig } from "../services/wheel-config.js"
+import { DEFAULT_LOAN_CONFIG, normalizeLoanConfig } from "../services/loan-config.js"
+import { normalizePaymentConfig } from "../services/payment-config.js"
 
 export class AppStore extends EventEmitter {
   users = new Map<string, User>()
@@ -64,34 +73,21 @@ export class AppStore extends EventEmitter {
     id: string
     vehicleId: string
     buyerUserId: string
-    paymentAsset: "IRR" | "GOLD_SOT" | "LOAN"
+    paymentAsset: "IRR" | "GOLD_SOT" | "LOAN" | "CARD_TO_CARD"
     paymentAmount: number
     loanMonths?: number
     downPaymentIrr?: number
     loanAmountIrr?: number
     monthlyInstallmentIrr?: number
+    slideDrawId?: string
+    slideEntryNumbers?: number[]
     status: "pending" | "paid" | "cancelled" | "completed"
     createdAt: string
     updatedAt: string
   }>()
-  autoLoans = new Map<string, {
-    id: string
-    userId: string
-    principalIrr: number
-    outstandingIrr: number
-    installmentCount?: number
-    monthlyInstallmentIrr?: number
-    interestRateMonthlyPercent?: number
-    totalRepayableIrr?: number
-    purpose?: "cash_credit" | "vehicle_purchase"
-    relatedVehicleId?: string
-    status: "pending" | "approved" | "active" | "repaid" | "rejected" | "defaulted"
-    restrictedUsage: boolean
-    approvedBy?: string
-    createdAt: string
-    updatedAt: string
-    dueAt?: string
-  }>()
+  cardToCardPayments = new Map<string, CardToCardPayment>()
+  checkListings = new Map<string, CheckListing>()
+  autoLoans = new Map<string, AutoLoan>()
   supportTickets = new Map<string, {
     id: string
     userId: string
@@ -248,11 +244,83 @@ export class AppStore extends EventEmitter {
     uses: number
     createdAt: string
   }>()
+  blogPosts = new Map<string, BlogPost>()
+  siteSettings: SiteSettings = {}
   termsText = ""
   disclaimerText = ""
   rulesText = ""
+  bannersContent: Array<{ id: string; title: string; text: string; buttonText: string; buttonLink: string; active: boolean; color: string }> = [
+    { id: "b1", title: "بنر بالای صفحه", text: "", buttonText: "", buttonLink: "", active: false, color: "#D4AF37" },
+    { id: "b2", title: "بنر وسط صفحه", text: "", buttonText: "", buttonLink: "", active: false, color: "#00BCD4" },
+    { id: "b3", title: "بنر قرعه‌کشی", text: "", buttonText: "", buttonLink: "", active: false, color: "#FF5722" },
+  ]
+  seoGlobalContent: { siteName: string; siteTagline: string; defaultMetaTitle: string; defaultMetaDescription: string; ogImage: string; twitterHandle: string; googleAnalyticsId: string } = {
+    siteName: "", siteTagline: "", defaultMetaTitle: "", defaultMetaDescription: "", ogImage: "", twitterHandle: "", googleAnalyticsId: "",
+  }
+  homeContent = {
+    mobileExperienceTitle: "کل سایت را راحت تجربه کن",
+    mobileExperienceDescription: "مسیر خرید خودرو، قرعه کشی، بازی و کیف پول از همین صفحه برای موبایل قابل دسترسی است.",
+    activeRafflesTitle: "قرعه کشی های فعال",
+    activeRafflesSubtitle: "بلیط پلکانی، کش بک ۲۰٪، شانس گردونه و جوایز متنوع",
+  }
   wheelConfig: WheelConfig = createDefaultWheelConfig()
+  loanConfig: LoanConfig = normalizeLoanConfig(DEFAULT_LOAN_CONFIG)
+  paymentConfig: PaymentConfig = normalizePaymentConfig(undefined)
   gameDifficulty = 50
+  seo = {
+    pages: [] as Array<{
+      id: string
+      path: string
+      title: string
+      description: string
+      keywords: string[]
+      ogTitle?: string
+      ogDescription?: string
+      ogImage?: string
+      twitterCard?: string
+      canonicalUrl?: string
+      status: "active" | "draft"
+      views?: number
+      lastModified: string
+    }>,
+    structuredData: [] as Array<{
+      id: string
+      type: "article" | "product" | "organization" | "breadcrumb"
+      pagePath: string
+      data: Record<string, any>
+      status: "active" | "draft"
+    }>,
+    robots: "",
+    sitemapVersion: "1.0",
+    robotsUpdated: new Date().toISOString(),
+    totalBacklinks: 0,
+    googleAnalytics: {
+      gaId: "",
+      trackingId: "",
+      enabled: false,
+      savedAt: new Date().toISOString(),
+    },
+    googleSearchConsole: {
+      propertyId: "",
+      verificationCode: "",
+      enabled: false,
+      verifiedAt: undefined as string | undefined,
+    },
+    backlinks: [] as Array<{
+      domain: string
+      sourceUrl: string
+      anchorText: string
+      authority: number
+      lastChecked: string
+    }>,
+    competitors: [] as Array<{
+      domain: string
+      backlinks: number
+      trafficEstimate: number
+      authority: number
+      keywords: number
+    }>,
+  }
 
   addLiveEvent(event: LiveEvent): void {
     this.liveEvents.unshift(event)
@@ -314,5 +382,17 @@ export class AppStore extends EventEmitter {
 
   getSlideDraws(): SlideDraw[] {
     return Array.from(this.slideDraws.values()).sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1))
+  }
+
+  getCheckListingsByUser(userId: string): CheckListing[] {
+    return Array.from(this.checkListings.values())
+      .filter((item) => item.ownerUserId === userId)
+      .sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1))
+  }
+
+  getCardToCardPaymentsByUser(userId: string): CardToCardPayment[] {
+    return Array.from(this.cardToCardPayments.values())
+      .filter((item) => item.userId === userId)
+      .sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1))
   }
 }

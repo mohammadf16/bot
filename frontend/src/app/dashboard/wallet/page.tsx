@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react"
 import { ArrowDownLeft, ArrowUpRight, Wallet } from "lucide-react"
 import toast from "react-hot-toast"
 import { apiRequest, randomIdempotencyKey } from "@/lib/api"
-import { formatToman, parseTomanInput } from "@/lib/money"
+import { formatMoneyInput, formatToman, parseTomanInput } from "@/lib/money"
 
 type WalletTx = {
   id: string
@@ -100,7 +100,7 @@ export default function DashboardWalletPage() {
               <div>
                 <input
                   value={depositValue}
-                  onChange={(e) => setDepositValue(e.target.value)}
+                  onChange={(e) => setDepositValue(formatMoneyInput(e.target.value))}
                   placeholder="مبلغ شارژ (تومان)"
                   className="w-full bg-white/35 border border-black/15 rounded-2xl px-4 py-3 placeholder:text-black/50"
                 />
@@ -112,7 +112,7 @@ export default function DashboardWalletPage() {
               <div>
                 <input
                   value={withdrawValue}
-                  onChange={(e) => setWithdrawValue(e.target.value)}
+                  onChange={(e) => setWithdrawValue(formatMoneyInput(e.target.value))}
                   placeholder="مبلغ برداشت (تومان)"
                   className="w-full bg-white/35 border border-black/15 rounded-2xl px-4 py-3 placeholder:text-black/50"
                 />
@@ -173,4 +173,3 @@ export default function DashboardWalletPage() {
     </div>
   )
 }
-

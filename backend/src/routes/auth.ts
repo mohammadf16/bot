@@ -10,6 +10,7 @@ import { pushUserNotification } from "../services/notifications.js"
 const registerSchema = z.object({
   email: z.string().email(),
   password: z.string().min(10).max(128),
+  phone: z.string().trim().regex(/^\+?\d{10,15}$/, "INVALID_PHONE_NUMBER"),
   referralCode: z.string().trim().min(4).max(32).optional(),
 })
 
@@ -105,7 +106,7 @@ export async function registerAuthRoutes({ app, store }: RouteContext): Promise<
       loanLockedBalance: 0,
       referralCode: `REF-${randomHex(4).toUpperCase()}`,
       referredBy,
-      profile: { fullName: "" },
+      profile: { fullName: "", phone: parsed.data.phone.trim() },
       notificationPrefs: { email: true, sms: false, push: true },
       createdAt: timestamp,
       updatedAt: timestamp,

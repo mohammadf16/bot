@@ -1,18 +1,27 @@
 ﻿import { z } from "zod"
 import type { RouteContext } from "../route-context.js"
 import { pushAudit, pushLiveEvent } from "../services/events.js"
+import { createCardToCardPayment, getCardToCardDestinationCard } from "../services/card-to-card-payments.js"
 import { pushUserNotification } from "../services/notifications.js"
 import { id } from "../utils/id.js"
 import { nowIso } from "../utils/time.js"
+import { buildLoanPlan, normalizeLoanConfig } from "../services/loan-config.js"
+import type { LoanInstallment } from "../types.js"
 
 const GOLD_SELL_RATE_IRR = 3_200_000
 const MICRO_TO_CHANCE_THRESHOLD_IRR = 50_000
 const MICRO_TO_CHANCE_RATE_IRR = 10_000
 const WITHDRAW_2FA_THRESHOLD_IRR = 100_000_000
-const LOAN_MAX_IRR = 5_000_000
 
 const depositSchema = z.object({
   amount: z.number().int().positive().max(5_000_000_000),
+})
+
+const cardToCardDepositSchema = z.object({
+  amount: z.number().int().positive().max(5_000_000_000),
+  fromCardLast4: z.string().trim().regex(/^\d{4}$/),
+  trackingCode: z.string().trim().min(4).max(64),
+  receiptImageUrl: z.string().trim().url().max(2048),
 })
 
 const withdrawSchema = z.object({
@@ -32,7 +41,7 @@ const microToChanceSchema = z.object({
 })
 
 const loanRequestSchema = z.object({
-  amount: z.number().int().positive().max(LOAN_MAX_IRR),
+  amount: z.number().int().positive(),
 })
 
 function idempotencyKey(req: { headers: Record<string, unknown> }): string | undefined {
@@ -53,6 +62,44 @@ function ensureUserAssets(user: {
   if (!user.vipLevelName) user.vipLevelName = "برنزی"
   if (user.vipCashbackPercent === undefined) user.vipCashbackPercent = 20
   if (user.loanLockedBalance === undefined) user.loanLockedBalance = 0
+}
+
+function plusMonthsIso(baseIso: string, months: number): string {
+  const base = new Date(baseIso)
+  const next = new Date(base.getTime())
+  next.setUTCMonth(next.getUTCMonth() + months)
+  return next.toISOString()
+}
+
+function buildLoanInstallments(args: {
+  principalIrr: number
+  totalRepayableIrr: number
+  installmentCount: number
+  baseDateIso: string
+}): LoanInstallment[] {
+  const count = Math.max(1, Math.trunc(args.installmentCount))
+  const principalTotal = Math.max(0, Math.trunc(args.principalIrr))
+  const repayableTotal = Math.max(0, Math.trunc(args.totalRepayableIrr))
+  const basePrincipalPart = Math.floor(principalTotal / count)
+  const principalRemainder = principalTotal - basePrincipalPart * count
+  const baseAmountPart = Math.floor(repayableTotal / count)
+  const amountRemainder = repayableTotal - baseAmountPart * count
+  const out: LoanInstallment[] = []
+  for (let i = 0; i < count; i += 1) {
+    const principalIrr = basePrincipalPart + (i < principalRemainder ? 1 : 0)
+    const amountIrr = baseAmountPart + (i < amountRemainder ? 1 : 0)
+    out.push({
+      installmentNumber: i + 1,
+      dueAt: plusMonthsIso(args.baseDateIso, i + 1),
+      amountIrr,
+      principalIrr,
+      interestIrr: Math.max(0, amountIrr - principalIrr),
+      paidAmountIrr: 0,
+      paidPrincipalIrr: 0,
+      status: "pending",
+    })
+  }
+  return out
 }
 
 export async function registerWalletRoutes({ app, store }: RouteContext): Promise<void> {
@@ -76,11 +123,15 @@ export async function registerWalletRoutes({ app, store }: RouteContext): Promis
       },
       loan: {
         lockedBalance: user.loanLockedBalance,
+        ...normalizeLoanConfig(store.loanConfig),
       },
       rates: {
         goldSellRateIrr: GOLD_SELL_RATE_IRR,
         microToChanceThresholdIrr: MICRO_TO_CHANCE_THRESHOLD_IRR,
         microToChanceRateIrr: MICRO_TO_CHANCE_RATE_IRR,
+      },
+      cardToCard: {
+        destinationCard: getCardToCardDestinationCard(store),
       },
       transactions: store.getWalletTxByUser(user.id).slice(0, 100),
     }
@@ -92,6 +143,13 @@ export async function registerWalletRoutes({ app, store }: RouteContext): Promis
       microToChanceThresholdIrr: MICRO_TO_CHANCE_THRESHOLD_IRR,
       microToChanceRateIrr: MICRO_TO_CHANCE_RATE_IRR,
       withdraw2faThresholdIrr: WITHDRAW_2FA_THRESHOLD_IRR,
+    }
+  })
+
+  app.get("/wallet/card-to-card/requests", { preHandler: [app.authenticate] }, async (request) => {
+    return {
+      destinationCard: getCardToCardDestinationCard(store),
+      items: store.getCardToCardPaymentsByUser(request.user.sub),
     }
   })
 
@@ -149,6 +207,72 @@ export async function registerWalletRoutes({ app, store }: RouteContext): Promis
       title: "شارژ کیف پول انجام شد",
       body: `${tx.amount.toLocaleString("fa-IR")} تومان به کیف پول اضافه شد.`,
       kind: "success",
+    })
+
+    return result
+  })
+
+  app.post("/wallet/deposit/card-to-card", { preHandler: [app.authenticate] }, async (request, reply) => {
+    const parsed = cardToCardDepositSchema.safeParse(request.body)
+    if (!parsed.success) return reply.code(400).send({ error: "INVALID_INPUT", details: parsed.error.flatten() })
+
+    const user = store.users.get(request.user.sub)
+    if (!user) return reply.code(404).send({ error: "USER_NOT_FOUND" })
+    ensureUserAssets(user)
+
+    const key = idempotencyKey(request)
+    if (key) {
+      const dedupe = store.idempotency.get(`${user.id}:deposit-card-to-card:${key}`)
+      if (dedupe) return dedupe
+    }
+
+    const payment = createCardToCardPayment(store, {
+      userId: user.id,
+      userEmail: user.email,
+      amount: parsed.data.amount,
+      purpose: "wallet_deposit",
+      fromCardLast4: parsed.data.fromCardLast4,
+      trackingCode: parsed.data.trackingCode,
+      receiptImageUrl: parsed.data.receiptImageUrl,
+    })
+
+    const tx = {
+      id: id("wtx"),
+      userId: user.id,
+      type: "deposit" as const,
+      amount: parsed.data.amount,
+      status: "pending" as const,
+      idempotencyKey: key,
+      createdAt: nowIso(),
+      meta: {
+        source: "card_to_card",
+        paymentId: payment.id,
+        trackingCode: parsed.data.trackingCode,
+        fromCardLast4: parsed.data.fromCardLast4,
+      },
+    }
+    store.walletTx.set(tx.id, tx)
+
+    const result = {
+      ok: true,
+      paymentId: payment.id,
+      txId: tx.id,
+      status: payment.status,
+      destinationCard: getCardToCardDestinationCard(store),
+    }
+    if (key) store.idempotency.set(`${user.id}:deposit-card-to-card:${key}`, result)
+
+    pushAudit(store, request, {
+      action: "WALLET_DEPOSIT_CARD_TO_CARD_REQUEST",
+      target: `payment:${payment.id}`,
+      success: true,
+      payload: { amount: payment.amount, userId: payment.userId },
+    })
+    pushUserNotification(store, {
+      userId: user.id,
+      title: "درخواست کارت به کارت ثبت شد",
+      body: "رسید شما ثبت شد و پس از تایید ادمین، کیف پول شارژ می‌شود.",
+      kind: "info",
     })
 
     return result
@@ -256,14 +380,53 @@ export async function registerWalletRoutes({ app, store }: RouteContext): Promis
     const user = store.users.get(request.user.sub)
     if (!user) return reply.code(404).send({ error: "USER_NOT_FOUND" })
     ensureUserAssets(user)
+    const loanConfig = normalizeLoanConfig(store.loanConfig)
+    store.loanConfig = loanConfig
+    if (!loanConfig.enabled) return reply.code(403).send({ error: "LOAN_DISABLED" })
+    if ((user.vipLevelId ?? 1) < loanConfig.requiredVipLevelId) {
+      return reply.code(403).send({ error: "VIP_LEVEL_REQUIRED", requiredLevel: loanConfig.requiredVipLevelId })
+    }
+    if (parsed.data.amount < loanConfig.minLoanIrr || parsed.data.amount > loanConfig.maxLoanIrr) {
+      return reply.code(400).send({ error: "LOAN_AMOUNT_OUT_OF_RANGE", minLoanIrr: loanConfig.minLoanIrr, maxLoanIrr: loanConfig.maxLoanIrr })
+    }
 
-    if ((user.vipLevelId ?? 1) < 3) return reply.code(403).send({ error: "VIP_LEVEL_REQUIRED", requiredLevel: 3 })
+    const amount = parsed.data.amount
+    const now = nowIso()
+    const plan = buildLoanPlan(loanConfig, amount, loanConfig.defaultInstallments)
 
-    const amount = Math.min(parsed.data.amount, LOAN_MAX_IRR)
+    const loan = {
+      id: id("loan"),
+      userId: user.id,
+      principalIrr: amount,
+      outstandingIrr: plan.totalRepayableIrr,
+      installmentCount: plan.installmentCount,
+      monthlyInstallmentIrr: plan.monthlyInstallmentIrr,
+      interestRateMonthlyPercent: plan.interestRateMonthlyPercent,
+      totalRepayableIrr: plan.totalRepayableIrr,
+      repaidIrr: 0,
+      paidInstallmentsCount: 0,
+      overdueInstallmentsCount: 0,
+      nextInstallmentNumber: 1,
+      nextDueAt: plusMonthsIso(now, 1),
+      purpose: "cash_credit" as const,
+      status: "active" as const,
+      restrictedUsage: true,
+      createdAt: now,
+      updatedAt: now,
+      dueAt: plusMonthsIso(now, plan.installmentCount),
+      installments: buildLoanInstallments({
+        principalIrr: amount,
+        totalRepayableIrr: plan.totalRepayableIrr,
+        installmentCount: plan.installmentCount,
+        baseDateIso: now,
+      }),
+    }
+
     user.walletBalance += amount
     user.loanLockedBalance = (user.loanLockedBalance ?? 0) + amount
-    user.updatedAt = nowIso()
+    user.updatedAt = now
     store.users.set(user.id, user)
+    store.autoLoans.set(loan.id, loan)
 
     const tx = {
       id: id("wtx"),
@@ -271,14 +434,16 @@ export async function registerWalletRoutes({ app, store }: RouteContext): Promis
       type: "loan_credit" as const,
       amount,
       status: "completed" as const,
-      createdAt: nowIso(),
-      meta: { max: LOAN_MAX_IRR, restricted: true },
+      createdAt: now,
+      meta: { min: loanConfig.minLoanIrr, max: loanConfig.maxLoanIrr, restricted: true, loanId: loan.id },
     }
     store.walletTx.set(tx.id, tx)
 
     return {
       ok: true,
       amount,
+      loan,
+      config: loanConfig,
       loanLockedBalance: user.loanLockedBalance,
       walletBalance: user.walletBalance,
     }

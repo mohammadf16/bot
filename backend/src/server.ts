@@ -13,9 +13,18 @@ import { registerAdminRoutes } from "./routes/admin.js"
 import { registerGameplayRoutes } from "./routes/gameplay.js"
 import { registerDatabaseStatusRoutes } from "./routes/database-status.js"
 import { registerEnterpriseRoutes } from "./routes/enterprise.js"
+import { registerSEORoutes } from "./routes/seo.js"
+import { registerSettingsRoutes } from "./routes/settings.js"
+import { registerBlogRoutes } from "./routes/blog.js"
 import { AppStore } from "./store/app-store.js"
 import { registerStorePersistence } from "./persistence/state-persistence.js"
 import { id } from "./utils/id.js"
+import {
+  buildDefaultRobots,
+  buildSitemapXml,
+  getMergedSEOPages,
+  resolveRequestOrigin,
+} from "./services/seo-pages.js"
 
 export async function buildServer() {
   const app = Fastify({
@@ -23,6 +32,8 @@ export async function buildServer() {
       level: env.NODE_ENV === "production" ? "info" : "debug",
     },
     trustProxy: true,
+    // Upload requests are sent as JSON + base64 and can exceed Fastify's default 1MB limit.
+    bodyLimit: Math.max(16 * 1024 * 1024, env.UPLOAD_IMAGE_MAX_BYTES * 2),
     genReqId: () => id("req"),
   })
 
@@ -43,8 +54,9 @@ export async function buildServer() {
     const statusCode = typeof (error as { statusCode?: unknown }).statusCode === "number"
       ? (error as { statusCode: number }).statusCode
       : 500
+    const errorCode = statusCode === 413 ? "PAYLOAD_TOO_LARGE" : "INTERNAL_SERVER_ERROR"
     reply.code(statusCode).send({
-      error: "INTERNAL_SERVER_ERROR",
+      error: errorCode,
       message: isProd ? "Unexpected server error" : err.message,
     })
   })
@@ -60,7 +72,30 @@ export async function buildServer() {
     await registerGameplayRoutes(ctx)
     await registerAdminRoutes(ctx)
     await registerEnterpriseRoutes(ctx)
+    await registerSEORoutes(ctx)
+    await registerSettingsRoutes(ctx)
+    await registerBlogRoutes(ctx)
   }, { prefix: "/api/v1" })
+
+  // Public SEO Routes
+  app.get("/sitemap.xml", async (request, reply) => {
+    try {
+      const { pages } = await getMergedSEOPages(store.seo.pages)
+      const sitemapContent = buildSitemapXml(pages, resolveRequestOrigin(request))
+      reply.type("application/xml").send(sitemapContent)
+    } catch {
+      reply.code(500).send({ error: "Failed to serve sitemap" })
+    }
+  })
+
+  app.get("/robots.txt", async (request, reply) => {
+    try {
+      const robotsContent = store.seo.robots.trim() || buildDefaultRobots(resolveRequestOrigin(request))
+      reply.type("text/plain").send(robotsContent)
+    } catch {
+      reply.code(500).send({ error: "Failed to serve robots.txt" })
+    }
+  })
 
   return app
 }

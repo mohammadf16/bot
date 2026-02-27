@@ -65,14 +65,32 @@ export interface RaffleConfig {
   freeEntryEveryN: number
 }
 
+export interface RaffleDynamicPricing {
+  basePrice: number
+  decayFactor: number
+  minPrice: number
+}
+
+export interface RaffleRewardConfig {
+  cashbackPercent: number
+  cashbackToGoldPercent: number
+  tomanPerGoldSot: number
+  mainPrizeTitle: string
+  mainPrizeValueIrr: number
+}
+
 export interface Raffle {
   id: string
   title: string
+  linkedVehicleId?: string
   maxTickets: number
   ticketsSold: number
+  participantsCount?: number
   status: RaffleStatus
   tiers: RaffleTier[]
   config: RaffleConfig
+  dynamicPricing?: RaffleDynamicPricing
+  rewardConfig?: RaffleRewardConfig
   seedCommitHash: string
   encryptedServerSeed: string
   createdBy: string
@@ -89,6 +107,7 @@ export interface Ticket {
   raffleId: string
   userId: string
   index: number
+  slideNumber: number
   pricePaid: number
   clientSeed: string
   createdAt: string
@@ -213,6 +232,93 @@ export interface WheelSpinRecord {
   createdAt: string
 }
 
+export interface LoanConfig {
+  enabled: boolean
+  requiredVipLevelId: number
+  minLoanIrr: number
+  maxLoanIrr: number
+  monthlyInterestRatePercent: number
+  minInstallments: number
+  maxInstallments: number
+  defaultInstallments: number
+}
+
+export type LoanInstallmentStatus = "pending" | "partial" | "paid" | "overdue"
+
+export interface LoanInstallment {
+  installmentNumber: number
+  dueAt: string
+  amountIrr: number
+  principalIrr: number
+  interestIrr: number
+  paidAmountIrr: number
+  paidPrincipalIrr?: number
+  paidAt?: string
+  status: LoanInstallmentStatus
+}
+
+export interface AutoLoan {
+  id: string
+  userId: string
+  principalIrr: number
+  outstandingIrr: number
+  installmentCount?: number
+  monthlyInstallmentIrr?: number
+  interestRateMonthlyPercent?: number
+  totalRepayableIrr?: number
+  repaidIrr?: number
+  paidInstallmentsCount?: number
+  overdueInstallmentsCount?: number
+  nextInstallmentNumber?: number
+  nextDueAt?: string
+  lastRepaymentAt?: string
+  installments?: LoanInstallment[]
+  purpose?: "cash_credit" | "vehicle_purchase"
+  relatedVehicleId?: string
+  status: "pending" | "approved" | "active" | "repaid" | "rejected" | "defaulted"
+  restrictedUsage: boolean
+  approvedBy?: string
+  createdAt: string
+  updatedAt: string
+  dueAt?: string
+}
+
+export interface OnlinePaymentGatewayConfig {
+  id: string
+  code: string
+  provider: string
+  displayName: string
+  enabled: boolean
+  sandbox: boolean
+  priority: number
+  checkoutUrl?: string
+  verifyUrl?: string
+  callbackUrl?: string
+  merchantId?: string
+  apiKey?: string
+  apiSecret?: string
+  publicKey?: string
+  privateKey?: string
+  webhookSecret?: string
+  minAmountIrr?: number
+  maxAmountIrr?: number
+  feePercent?: number
+  feeFixedIrr?: number
+  description?: string
+  createdAt: string
+  updatedAt: string
+}
+
+export interface PaymentConfig {
+  cardToCard: {
+    enabled: boolean
+    destinationCard: string
+  }
+  onlineGateways: OnlinePaymentGatewayConfig[]
+  defaultOnlineGatewayId?: string
+  updatedAt: string
+}
+
 export interface NotificationItem {
   id: string
   userId: string
@@ -266,6 +372,9 @@ export interface SlideDrawEntry {
   entryNumber: number
   userId: string
   createdAt: string
+  sourceType?: "chance_spend" | "showroom_purchase"
+  sourceOrderId?: string
+  sourceVehicleId?: string
 }
 
 export interface SlideDrawWinner {
@@ -301,4 +410,171 @@ export interface SlideDraw {
   createdBy: string
   createdAt: string
   updatedAt: string
+}
+
+export type CheckListingStatus = "pending_review" | "approved" | "rejected" | "completed"
+
+export interface CheckListing {
+  id: string
+  ownerUserId: string
+  ownerEmail: string
+  ownerName: string
+  ownerPhone?: string
+  vehicleModel: string
+  vehicleYear?: number
+  city: string
+  suggestedPriceIrr: number
+  deliveryDate: string
+  notes?: string
+  status: CheckListingStatus
+  createdAt: string
+  updatedAt: string
+}
+
+export type CardToCardPaymentPurpose =
+  | "wallet_deposit"
+  | "showroom_order"
+  | "raffle_ticket_purchase"
+  | "raffle_combo_purchase"
+
+export interface CardToCardPayment {
+  id: string
+  userId: string
+  userEmail: string
+  amount: number
+  destinationCard: string
+  fromCardLast4: string
+  trackingCode: string
+  receiptImageUrl: string
+  purpose: CardToCardPaymentPurpose
+  status: "pending" | "approved" | "rejected"
+  metadata?: Record<string, string | number | boolean | string[] | number[]>
+  createdAt: string
+  updatedAt: string
+  reviewedAt?: string
+  reviewedBy?: string
+  reviewNote?: string
+}
+
+export interface BlogPost {
+  id: string
+  title: string
+  slug: string
+  excerpt: string
+  content: string
+  category: string
+  tags: string[]
+  coverImage: string
+  status: "draft" | "published" | "archived"
+  featured: boolean
+  views: number
+  author: string
+  publishedAt: string | null
+  createdAt: string
+  updatedAt: string
+}
+
+export interface SiteSettings {
+  general?: {
+    siteName: string
+    siteTagline: string
+    logoUrl: string
+    faviconUrl: string
+    maintenanceMode: boolean
+    maintenanceMessage: string
+    defaultLanguage: string
+    copyrightText: string
+  }
+  header?: {
+    sticky: boolean
+    transparent: boolean
+    announcementBarActive: boolean
+    announcementText: string
+    announcementColor: string
+    announcementLink: string
+    navLinks: Array<{ id: string; label: string; href: string; isExternal?: boolean }>
+    ctaLabel: string
+    ctaHref: string
+  }
+  footer?: {
+    companyDescription: string
+    columns: Array<{ title: string; links: Array<{ label: string; href: string }> }>
+    socialLinks: Array<{ platform: string; url: string; icon: string }>
+    bottomLinks: Array<{ label: string; href: string }>
+    newsletter: boolean
+    newsletterText: string
+  }
+  contact?: {
+    address: string
+    city: string
+    postalCode: string
+    phone: string
+    phone2: string
+    email: string
+    emailSupport: string
+    supportHours: string
+    telegramLink: string
+    instagramLink: string
+    whatsappNumber: string
+    linkedinUrl: string
+    twitterUrl: string
+    youtubeUrl: string
+    mapEmbedUrl: string
+    mapLat: string
+    mapLng: string
+  }
+  about?: {
+    heroTitle: string
+    heroSubtitle: string
+    heroImage: string
+    missionTitle: string
+    missionText: string
+    visionTitle: string
+    visionText: string
+    statsUsers: string
+    statsRaffles: string
+    statsPrizes: string
+    statsSatisfaction: string
+    valuesTitle: string
+    values: Array<{ title: string; description: string; color: string }>
+    teamTitle: string
+    team: Array<{ name: string; role: string; image: string; bio: string }>
+    timelineTitle: string
+    timeline: Array<{ year: string; title: string; description: string }>
+    ctaTitle: string
+    ctaText: string
+    ctaButton: string
+    ctaLink: string
+  }
+  home?: {
+    heroTitle: string
+    heroSubtitle: string
+    heroCta1: string
+    heroCta1Link: string
+    heroCta2: string
+    heroCta2Link: string
+    statsUsers: string
+    statsRaffles: string
+    statsPrizes: string
+    featureTitle: string
+    featureSubtitle: string
+    features: Array<{ icon: string; title: string; description: string }>
+    serviceTitle: string
+    serviceSubtitle: string
+    ctaTitle: string
+    ctaSubtitle: string
+    ctaCta: string
+  }
+  theme?: {
+    accentGold: string
+    accentCyan: string
+    accentGoldLight: string
+    accentCyanLight: string
+    fontMain: string
+    fontHeading: string
+    borderRadius: string
+    glassOpacity: string
+  }
+  updatedAt?: string
+  updatedBy?: string
 }

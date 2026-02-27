@@ -398,13 +398,36 @@ CREATE TABLE IF NOT EXISTS showroom_orders (
   id VARCHAR(64) PRIMARY KEY,
   vehicle_id VARCHAR(64) NOT NULL,
   buyer_user_id VARCHAR(64) NOT NULL,
-  payment_asset ENUM('IRR','GOLD_SOT','LOAN') NOT NULL,
+  payment_asset ENUM('IRR','GOLD_SOT','LOAN','CARD_TO_CARD') NOT NULL,
   payment_amount DECIMAL(24,6) NOT NULL,
   status ENUM('pending','paid','cancelled','completed') NOT NULL,
   created_at DATETIME(3) NOT NULL,
   updated_at DATETIME(3) NOT NULL,
   CONSTRAINT fk_showroom_order_vehicle FOREIGN KEY (vehicle_id) REFERENCES showroom_vehicles(id),
   CONSTRAINT fk_showroom_order_buyer FOREIGN KEY (buyer_user_id) REFERENCES users(id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+ALTER TABLE showroom_orders
+  MODIFY COLUMN payment_asset ENUM('IRR','GOLD_SOT','LOAN','CARD_TO_CARD') NOT NULL;
+
+CREATE TABLE IF NOT EXISTS check_listings (
+  id VARCHAR(64) PRIMARY KEY,
+  owner_user_id VARCHAR(64) NOT NULL,
+  owner_email VARCHAR(255) NOT NULL,
+  owner_name VARCHAR(180) NOT NULL,
+  owner_phone VARCHAR(32) NULL,
+  vehicle_model VARCHAR(180) NOT NULL,
+  vehicle_year INT NULL,
+  city VARCHAR(120) NOT NULL,
+  suggested_price_irr BIGINT NOT NULL,
+  delivery_date DATE NOT NULL,
+  notes TEXT NULL,
+  status ENUM('pending_review','approved','rejected','completed') NOT NULL DEFAULT 'pending_review',
+  created_at DATETIME(3) NOT NULL,
+  updated_at DATETIME(3) NOT NULL,
+  INDEX idx_check_listing_owner (owner_user_id, created_at),
+  INDEX idx_check_listing_status (status, created_at),
+  CONSTRAINT fk_check_listing_owner FOREIGN KEY (owner_user_id) REFERENCES users(id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS auto_loans (

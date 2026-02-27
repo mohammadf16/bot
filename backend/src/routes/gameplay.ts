@@ -1,4 +1,5 @@
 ﻿import { z } from "zod"
+import { randomInt } from "node:crypto"
 import type { RouteContext } from "../route-context.js"
 import { id } from "../utils/id.js"
 import { nowIso } from "../utils/time.js"
@@ -189,6 +190,7 @@ export async function registerGameplayRoutes({ app, store }: RouteContext): Prom
       entryNumber,
       userId: user.id,
       createdAt,
+      sourceType: "chance_spend" as const,
     }))
     draw.entries = [...(draw.entries ?? []), ...newEntries]
     draw.updatedAt = createdAt
@@ -369,12 +371,12 @@ export async function registerGameplayRoutes({ app, store }: RouteContext): Prom
   })
 
   app.get("/slide/single/today", async () => {
-    const dateKey = todayKey()
-    const target = store.dailySlideTargets.get(dateKey)
     return {
-      date: dateKey,
-      hasTarget: Boolean(target),
-      targetNumber: target?.winningNumber,
+      date: todayKey(),
+      mode: "random",
+      winProbabilityPercent: 1,
+      hasTarget: false,
+      targetNumber: null,
     }
   })
 
@@ -394,11 +396,9 @@ export async function registerGameplayRoutes({ app, store }: RouteContext): Prom
     }
 
     const dateKey = todayKey()
-    const target = store.dailySlideTargets.get(dateKey)
-    if (!target) return reply.code(400).send({ error: "DAILY_TARGET_NOT_SET" })
-
-    const rolledNumber = 1 + Math.floor(Math.random() * 100)
-    const win = rolledNumber === target.winningNumber
+    const rolledNumber = randomInt(1, 101)
+    const winningNumber = randomInt(1, 101)
+    const win = rolledNumber === winningNumber
     let reward = 0
     if (win) {
       reward = 5_000_000
@@ -411,7 +411,7 @@ export async function registerGameplayRoutes({ app, store }: RouteContext): Prom
         amount: reward,
         status: "completed",
         createdAt: nowIso(),
-        meta: { source: "slide_single_daily_win", date: dateKey, number: rolledNumber },
+        meta: { source: "slide_single_random_win", date: dateKey, rolledNumber, winningNumber },
       })
     }
 
@@ -421,7 +421,8 @@ export async function registerGameplayRoutes({ app, store }: RouteContext): Prom
     return {
       date: dateKey,
       rolledNumber,
-      targetNumber: target.winningNumber,
+      winningNumber,
+      targetNumber: winningNumber,
       win,
       reward,
       balances: {
@@ -663,3 +664,4 @@ export async function registerGameplayRoutes({ app, store }: RouteContext): Prom
     return reply.code(204).send()
   })
 }
+

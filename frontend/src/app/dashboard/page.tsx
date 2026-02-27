@@ -7,6 +7,7 @@ import Link from "next/link"
 import toast from "react-hot-toast"
 import { apiRequest } from "@/lib/api"
 import { useAuth } from "@/lib/auth-context"
+import { formatToman } from "@/lib/money"
 
 type TicketItem = {
   id: string
@@ -66,9 +67,9 @@ export default function UserDashboard() {
 
   const stats = [
     { label: "بلیط های فعال", value: tickets.length.toLocaleString("fa-IR"), icon: Ticket, color: "text-blue-500" },
-    { label: "موجودی کیف پول", value: (user?.walletBalance ?? 0).toLocaleString("fa-IR"), unit: "تومان", icon: Wallet, color: "text-accent-gold" },
+    { label: "موجودی کیف پول", value: formatToman(user?.walletBalance ?? 0), unit: "تومان", icon: Wallet, color: "text-accent-gold" },
     { label: "شانس قرعه", value: (user?.chances ?? 0).toLocaleString("fa-IR"), icon: Zap, color: "text-purple-500" },
-    { label: "کش بک", value: cashback.toLocaleString("fa-IR"), unit: "تومان", icon: Wallet, color: "text-cyan-400" },
+    { label: "کش بک", value: formatToman(cashback), unit: "تومان", icon: Wallet, color: "text-cyan-400" },
     { label: "زیرمجموعه", value: referral.totalReferrals.toLocaleString("fa-IR"), icon: Users, color: "text-emerald-500" },
   ]
 
@@ -129,7 +130,7 @@ export default function UserDashboard() {
             </div>
             <div className="text-left">
               <p className="text-xs text-white/40">{item.source}</p>
-              {typeof item.amount === "number" ? <p className="font-bold">{item.amount.toLocaleString("fa-IR")} تومان</p> : null}
+              {typeof item.amount === "number" ? <p className="font-bold">{formatToman(item.amount)} تومان</p> : null}
             </div>
           </div>
         ))}
@@ -145,7 +146,7 @@ export default function UserDashboard() {
               <p className="text-xs text-white/40">کد بلیط: {t.id} - شماره: {t.index.toLocaleString("fa-IR")}</p>
             </div>
             <div className="text-left">
-              <p className="font-bold">{t.pricePaid.toLocaleString("fa-IR")} تومان</p>
+              <p className="font-bold">{formatToman(t.pricePaid)} تومان</p>
               <p className="text-xs text-white/40">{t.raffleStatus}</p>
             </div>
           </div>

@@ -4,69 +4,11 @@ import { useCallback, useEffect, useMemo, useState } from "react"
 import { motion, AnimatePresence } from "framer-motion"
 import { ShieldCheck, Trophy, Users, Zap, Activity, History, Sparkles, Cpu, Target } from "lucide-react"
 import toast from "react-hot-toast"
-
-// --- MOCKED DEPENDENCIES FOR PREVIEW ENVIRONMENT ---
-// These replace the missing imports from "@/lib/api", "@/lib/money", and "@/lib/auth-context"
+import { apiRequest } from "@/lib/api"
+import { useAuth } from "@/lib/auth-context"
+import { formatMoneyInput, parseBoundedIntInput } from "@/lib/money"
 
 const formatToman = (amount: number) => `${amount.toLocaleString("fa-IR")} تومان`
-
-const useAuth = () => {
-  return { user: { id: "test-user", chances: 25 } }
-}
-
-const apiRequest = async <T,>(url: string, options?: any, _config?: any): Promise<T> => {
-  // Simulate network delay
-  await new Promise(resolve => setTimeout(resolve, 800))
-
-  if (url === "/slide/draw/current") {
-    return {
-      draw: {
-        id: "draw-test-01",
-        status: "processing", // CHANGE THIS TO "scheduled", "processing", or "drawn" TO TEST EFFECTS
-        title: "قرعه‌کشی ویژه‌ی ماشین اسلاید",
-        scheduledAt: new Date(Date.now() + 3600000).toISOString(),
-        participants: [
-          { userId: "u1", fullName: "علی کاظمی", email: "ali@example.com", chances: 12 },
-          { userId: "u2", fullName: "سارا رضایی", email: "sara@example.com", chances: 5 },
-          { userId: "u3", fullName: "رضا محمدی", email: "reza@example.com", chances: 20 },
-        ],
-        prizes: [
-          { title: "جایزه بزرگ ویژه", rankFrom: 1, rankTo: 1, amount: 50000000 },
-          { title: "اعتبار هدیه", rankFrom: 2, rankTo: 5, amount: 2000000 },
-        ],
-        totalEntries: 37,
-        seedCommitHash: "0x9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08",
-        proof: null,
-        targetNumber: 849302, // The final winning number
-      }
-    } as any
-  }
-
-  if (url === "/slide/draw/current/me") {
-    return {
-      drawId: "draw-test-01",
-      status: "scheduled",
-      myEntryNumbers: [123456, 987654],
-      myEntriesCount: 2,
-      availableChances: 25
-    } as any
-  }
-
-  if (url.includes("/entries")) {
-    const body = JSON.parse(options?.body || "{}")
-    const chances = body.chancesToUse || 1
-    const newNumbers = Array.from({ length: chances }, () => randomSixDigit())
-    return {
-      assignedNumbers: newNumbers,
-      chancesUsed: chances,
-      availableChances: 25 - chances,
-      myEntriesCount: 2 + chances
-    } as any
-  }
-
-  throw new Error("API Route Not Found")
-}
-// ---------------------------------------------------
 
 interface Participant {
   userId: string
@@ -156,6 +98,7 @@ export default function SlideGamePage() {
   const { user } = useAuth()
   const [draw, setDraw] = useState<DrawData | null>(null)
   const [myEntries, setMyEntries] = useState<MyEntriesData | null>(null)
+  const [raffleTickets, setRaffleTickets] = useState<Array<{ raffleTitle: string; slideNumber: number }>>([])
   const [chancesToUse, setChancesToUse] = useState(1)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [now, setNow] = useState(Date.now())
@@ -212,6 +155,21 @@ export default function SlideGamePage() {
       clearInterval(poll)
     }
   }, [load])
+
+  useEffect(() => {
+    if (!user) { setRaffleTickets([]); return }
+    ;(async () => {
+      try {
+        const data = await apiRequest<{ items: Array<{ source?: string; raffleTitle?: string; slideNumber?: number }> }>("/me/tickets")
+        const tickets = (data.items ?? [])
+          .filter((item) => item.source === "raffle_ticket" && item.slideNumber)
+          .map((item) => ({ raffleTitle: item.raffleTitle ?? "قرعه‌کشی", slideNumber: item.slideNumber! }))
+        setRaffleTickets(tickets)
+      } catch {
+        setRaffleTickets([])
+      }
+    })()
+  }, [user])
 
   async function submitChances() {
     if (!draw) return
@@ -320,10 +278,10 @@ export default function SlideGamePage() {
                       <div>
                         <label className="text-[11px] text-white/50 mb-1 block">تعداد شانس برای این قرعه</label>
                         <input
-                          type="number"
-                          min={1}
-                          value={chancesToUse}
-                          onChange={(e) => setChancesToUse(Math.max(1, Number(e.target.value || 1)))}
+                          type="text"
+                          inputMode="numeric"
+                          value={formatMoneyInput(String(chancesToUse))}
+                          onChange={(e) => setChancesToUse(parseBoundedIntInput(e.target.value, { min: 1 }) ?? 1)}
                           className="w-full rounded-2xl bg-black/50 border border-cyan-500/30 px-4 py-3 text-base outline-none focus:border-cyan-400 focus:bg-cyan-950/30 transition-all font-mono text-center"
                         />
                       </div>
@@ -355,6 +313,23 @@ export default function SlideGamePage() {
                       ) : (
                         <p className="text-xs text-white/40 italic">هنوز شماره‌ای ثبت نشده است.</p>
                       )}
+                    </div>
+                  </div>
+                )}
+
+                {user && raffleTickets.length > 0 && (
+                  <div className="w-full max-w-4xl mx-auto mb-8 rounded-3xl border border-amber-500/30 bg-amber-500/5 p-5 relative z-10">
+                    <p className="text-[11px] text-amber-400/80 mb-3 uppercase tracking-widest font-bold flex items-center gap-2">
+                      <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse inline-block" />
+                      شناسه‌های بلیط قرعه‌کشی من — اگر این شناسه انتخاب شود برنده می‌شوید
+                    </p>
+                    <div className="flex flex-wrap gap-2 max-h-32 overflow-y-auto custom-scrollbar">
+                      {raffleTickets.map((t, i) => (
+                        <div key={i} className="flex items-center gap-2 bg-black/40 border border-amber-500/20 px-3 py-2 rounded-xl">
+                          <span className="font-mono text-[13px] font-black text-amber-300">{t.slideNumber.toLocaleString("fa-IR")}</span>
+                          <span className="text-[10px] text-white/40">{t.raffleTitle}</span>
+                        </div>
+                      ))}
                     </div>
                   </div>
                 )}

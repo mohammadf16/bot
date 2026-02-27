@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react"
 import { Plus, Trash2 } from "lucide-react"
 import toast from "react-hot-toast"
 import { apiRequest } from "@/lib/api"
+import { formatMoneyInput, parseBoundedIntInput } from "@/lib/money"
 
 type Segment = { label: string; color: string; weight: number }
 type WheelConfig = {
@@ -141,11 +142,10 @@ export default function AdminWheelPage() {
               <div className="col-span-4 md:col-span-3">
                 <label className="text-xs text-white/60">وزن (1-100)</label>
                 <input
-                  type="number"
-                  min={1}
-                  max={100}
-                  value={segment.weight}
-                  onChange={(e) => updateSegment(idx, { weight: Number(e.target.value) })}
+                  type="text"
+                  inputMode="numeric"
+                  value={formatMoneyInput(String(segment.weight))}
+                  onChange={(e) => updateSegment(idx, { weight: parseBoundedIntInput(e.target.value, { min: 1, max: 100 }) ?? 1 })}
                   className="w-full mt-1 bg-dark-surface rounded px-3 py-2 border border-dark-border"
                 />
               </div>
@@ -162,16 +162,16 @@ export default function AdminWheelPage() {
           <div className="bg-dark-bg/50 border border-dark-border/40 rounded-xl p-4 space-y-2">
             <h3 className="font-bold mb-1">تنظیم شانس‌ها</h3>
             <label className="text-sm text-dark-text/60 block">هزینه گردونه</label>
-            <input type="number" className="w-full bg-dark-surface rounded px-3 py-2 border border-dark-border" value={config.wheelCostChances} onChange={(e) => setConfig({ ...config, wheelCostChances: Number(e.target.value) })} />
+            <input type="text" inputMode="numeric" className="w-full bg-dark-surface rounded px-3 py-2 border border-dark-border" value={formatMoneyInput(String(config.wheelCostChances))} onChange={(e) => setConfig({ ...config, wheelCostChances: parseBoundedIntInput(e.target.value, { min: 0 }) ?? 0 })} />
             <label className="text-sm text-dark-text/60 block">هزینه شرکت قرعه کشی</label>
-            <input type="number" className="w-full bg-dark-surface rounded px-3 py-2 border border-dark-border" value={config.raffleCostChances} onChange={(e) => setConfig({ ...config, raffleCostChances: Number(e.target.value) })} />
+            <input type="text" inputMode="numeric" className="w-full bg-dark-surface rounded px-3 py-2 border border-dark-border" value={formatMoneyInput(String(config.raffleCostChances))} onChange={(e) => setConfig({ ...config, raffleCostChances: parseBoundedIntInput(e.target.value, { min: 0 }) ?? 0 })} />
             <label className="text-sm text-dark-text/60 block">شانس زیرمجموعه</label>
-            <input type="number" className="w-full bg-dark-surface rounded px-3 py-2 border border-dark-border" value={config.referralChancePerUser} onChange={(e) => setConfig({ ...config, referralChancePerUser: Number(e.target.value) })} />
+            <input type="text" inputMode="numeric" className="w-full bg-dark-surface rounded px-3 py-2 border border-dark-border" value={formatMoneyInput(String(config.referralChancePerUser))} onChange={(e) => setConfig({ ...config, referralChancePerUser: parseBoundedIntInput(e.target.value, { min: 0 }) ?? 0 })} />
           </div>
           <div className="bg-dark-bg/50 border border-dark-border/40 rounded-xl p-4 space-y-2">
             <h3 className="font-bold mb-1">ماشین اسلاید</h3>
             <label className="text-sm text-dark-text/60 block">هزینه هر بازی</label>
-            <input type="number" className="w-full bg-dark-surface rounded px-3 py-2 border border-dark-border" value={config.slideGameCostChances} onChange={(e) => setConfig({ ...config, slideGameCostChances: Number(e.target.value) })} />
+            <input type="text" inputMode="numeric" className="w-full bg-dark-surface rounded px-3 py-2 border border-dark-border" value={formatMoneyInput(String(config.slideGameCostChances))} onChange={(e) => setConfig({ ...config, slideGameCostChances: parseBoundedIntInput(e.target.value, { min: 0 }) ?? 0 })} />
           </div>
         </div>
 
@@ -182,4 +182,3 @@ export default function AdminWheelPage() {
     </div>
   )
 }
-

@@ -1,15 +1,19 @@
-﻿
 import { z } from "zod"
+import { mkdir, readFile, writeFile } from "node:fs/promises"
+import path from "node:path"
 import type { RouteContext } from "../route-context.js"
+import { env } from "../env.js"
+import type { AutoLoan, LoanInstallment } from "../types.js"
 import { id } from "../utils/id.js"
 import { nowIso } from "../utils/time.js"
 import { pushLiveEvent } from "../services/events.js"
+import { createCardToCardPayment, getCardToCardDestinationCard } from "../services/card-to-card-payments.js"
 import { pushUserNotification } from "../services/notifications.js"
+import { buildLoanPlan, normalizeLoanConfig, resolveInstallments } from "../services/loan-config.js"
+import { normalizePaymentConfig } from "../services/payment-config.js"
 
 const LEGAL_DISCLAIMER_DEFAULT = "این سایت یک پلتفرم سرگرمی است و هیچ سود قطعی به کاربران وعده داده نمی شود."
-const LOAN_MAX_IRR = 5_000_000
 const AUCTION_BID_STEP_IRR = 10_000_000
-const CAR_LOAN_MONTHLY_RATE = 0.015
 const DAILY_STREAK_REWARDS = [1, 2, 3, 4, 5, 6, 10]
 
 type VipSnapshot = {
@@ -24,12 +28,13 @@ const welcomeClaimSchema = z.object({
 })
 
 const loanRequestSchema = z.object({
-  amount: z.number().int().positive().max(LOAN_MAX_IRR),
-  dueDays: z.number().int().min(7).max(180).optional(),
+  amount: z.number().int().positive(),
+  dueDays: z.number().int().min(1).max(3650).optional(),
 })
 
 const loanRepaySchema = z.object({
   amount: z.number().int().positive().max(1_000_000_000),
+  installmentNumber: z.number().int().min(1).max(240).optional(),
 })
 
 const supportCreateSchema = z.object({
@@ -50,6 +55,13 @@ const legalSchema = z.object({
   disclaimer: z.string().trim().min(10).max(20_000),
 })
 
+const homeContentSchema = z.object({
+  mobileExperienceTitle: z.string().trim().min(3).max(120),
+  mobileExperienceDescription: z.string().trim().min(10).max(1000),
+  activeRafflesTitle: z.string().trim().min(3).max(120),
+  activeRafflesSubtitle: z.string().trim().min(3).max(300),
+})
+
 const createAuctionSchema = z.object({
   title: z.string().trim().min(3).max(180),
   mode: z.enum(["blind", "visible"]),
@@ -60,29 +72,104 @@ const createAuctionSchema = z.object({
 })
 
 const liveBidSchema = z.object({ amount: z.number().int().positive() })
+const imageUrlSchema = z
+  .string()
+  .trim()
+  .min(1)
+  .max(1024)
+  .refine((value) => /^https?:\/\//.test(value) || value.startsWith("/"), { message: "INVALID_IMAGE_URL" })
+const imageUrlsSchema = z.array(imageUrlSchema).min(1).max(50)
 const showroomOrderSchema = z.object({
-  paymentAsset: z.enum(["IRR", "GOLD_SOT", "LOAN"]),
-  loanMonths: z.number().int().min(6).max(60).optional(),
+  paymentAsset: z.enum(["IRR", "GOLD_SOT", "LOAN", "CARD_TO_CARD"]),
+  loanMonths: z.number().int().min(1).max(120).optional(),
   downPaymentIrr: z.number().int().min(0).max(10_000_000_000).optional(),
+  fromCardLast4: z.string().trim().regex(/^\d{4}$/).optional(),
+  trackingCode: z.string().trim().min(4).max(64).optional(),
+  receiptImageUrl: z.string().trim().url().max(2048).optional(),
 })
 const showroomCreateSchema = z.object({
   title: z.string().trim().min(3).max(180),
-  imageUrl: z.string().trim().url(),
+  imageUrl: imageUrlSchema.optional(),
+  imageUrls: imageUrlsSchema.optional(),
+  primaryImageIndex: z.number().int().min(0).max(1000).optional(),
+  model: z.string().trim().min(2).max(180).optional(),
+  // Accept both Jalali (e.g. 1402) and Gregorian (e.g. 2023) years.
+  year: z.number().int().min(1300).max(2100).optional(),
+  city: z.string().trim().min(2).max(120).optional(),
+  mileageKm: z.number().int().min(0).max(2_000_000).optional(),
+  isNew: z.boolean().optional(),
+  transmission: z.enum(["automatic", "manual"]).optional(),
+  fuelType: z.enum(["gasoline", "hybrid", "electric", "diesel"]).optional(),
+  participantsCount: z.number().int().min(0).max(10_000_000).optional(),
+  raffleParticipantsCount: z.number().int().min(0).max(10_000_000).optional(),
+  cashbackPercent: z.number().int().min(0).max(100).optional(),
+  cashbackToGoldPercent: z.number().int().min(0).max(100).optional(),
+  goldSotBack: z.number().int().min(0).max(1_000_000_000).optional(),
+  tomanPerGoldSot: z.number().int().min(1).max(1_000_000_000).optional(),
+  mainPrizeTitle: z.string().trim().min(2).max(180).optional(),
+  mainPrizeValueIrr: z.number().int().min(0).max(1_000_000_000_000).optional(),
   sourceType: z.enum(["lottery_winback", "external_purchase"]).default("external_purchase"),
   listedPriceIrr: z.number().int().positive().optional(),
   listedPriceGoldSot: z.number().positive().optional(),
   acquisitionCostIrr: z.number().int().positive().optional(),
+  directPurchaseEnabled: z.boolean().optional(),
+  directPurchaseGroupSize: z.number().int().min(1).max(10_000_000).optional(),
+  directPurchaseCurrentParticipants: z.number().int().min(0).max(10_000_000).optional(),
+  directPurchaseTotalCostPerParticipant: z.number().int().positive().optional(),
+}).refine((data) => Boolean(data.imageUrl) || (data.imageUrls?.length ?? 0) > 0, {
+  message: "IMAGE_REQUIRED",
+  path: ["imageUrls"],
 })
 const showroomUpdateSchema = z.object({
   title: z.string().trim().min(3).max(180).optional(),
-  imageUrl: z.string().trim().url().optional(),
+  imageUrl: imageUrlSchema.optional(),
+  imageUrls: imageUrlsSchema.optional(),
+  primaryImageIndex: z.number().int().min(0).max(1000).optional(),
+  model: z.string().trim().min(2).max(180).optional(),
+  // Accept both Jalali (e.g. 1402) and Gregorian (e.g. 2023) years.
+  year: z.number().int().min(1300).max(2100).optional(),
+  city: z.string().trim().min(2).max(120).optional(),
+  mileageKm: z.number().int().min(0).max(2_000_000).optional(),
+  isNew: z.boolean().optional(),
+  transmission: z.enum(["automatic", "manual"]).optional(),
+  fuelType: z.enum(["gasoline", "hybrid", "electric", "diesel"]).optional(),
+  participantsCount: z.number().int().min(0).max(10_000_000).optional(),
+  raffleParticipantsCount: z.number().int().min(0).max(10_000_000).optional(),
+  cashbackPercent: z.number().int().min(0).max(100).optional(),
+  cashbackToGoldPercent: z.number().int().min(0).max(100).optional(),
+  goldSotBack: z.number().int().min(0).max(1_000_000_000).optional(),
+  tomanPerGoldSot: z.number().int().min(1).max(1_000_000_000).optional(),
+  mainPrizeTitle: z.string().trim().min(2).max(180).optional(),
+  mainPrizeValueIrr: z.number().int().min(0).max(1_000_000_000_000).optional(),
   status: z.enum(["available", "reserved", "sold", "archived"]).optional(),
   listedPriceIrr: z.number().int().positive().optional(),
   listedPriceGoldSot: z.number().positive().optional(),
   acquisitionCostIrr: z.number().int().positive().optional(),
+  directPurchaseEnabled: z.boolean().optional(),
+  directPurchaseGroupSize: z.number().int().min(1).max(10_000_000).optional(),
+  directPurchaseCurrentParticipants: z.number().int().min(0).max(10_000_000).optional(),
+  directPurchaseTotalCostPerParticipant: z.number().int().positive().optional(),
 })
 const showroomOrderUpdateSchema = z.object({
   status: z.enum(["pending", "paid", "cancelled", "completed"]),
+})
+const checkCreateSchema = z.object({
+  ownerName: z.string().trim().min(2).max(180),
+  ownerPhone: z.string().trim().min(7).max(32).optional(),
+  vehicleModel: z.string().trim().min(2).max(180),
+  vehicleYear: z.number().int().min(1300).max(2100).optional(),
+  city: z.string().trim().min(2).max(120),
+  suggestedPriceIrr: z.number().int().positive().max(1_000_000_000_000),
+  deliveryDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  notes: z.string().trim().max(5000).optional(),
+})
+const checkStatusSchema = z.object({
+  status: z.enum(["pending_review", "approved", "rejected", "completed"]),
+})
+const imageUploadSchema = z.object({
+  fileName: z.string().trim().min(1).max(180).optional(),
+  mimeType: z.enum(["image/jpeg", "image/png", "image/webp", "image/avif", "image/gif"]),
+  contentBase64: z.string().trim().min(20),
 })
 const broadcastSchema = z.object({
   title: z.string().trim().min(2).max(120),
@@ -95,6 +182,34 @@ const duelJoinSchema = z.object({ duelId: z.string().trim().min(3).optional() })
 const duelChatSchema = z.object({ body: z.string().trim().min(1).max(500) })
 const missionCompleteSchema = z.object({ code: z.enum(["spin_wheel", "buy_ticket", "invite_friend"]) })
 const referralCodeSchema = z.object({ prefix: z.string().trim().min(2).max(8).optional() })
+
+const adminLoanConfigSchema = z.object({
+  enabled: z.boolean(),
+  requiredVipLevelId: z.number().int().min(1).max(5),
+  minLoanIrr: z.number().int().min(1).max(1_000_000_000_000),
+  maxLoanIrr: z.number().int().min(1).max(1_000_000_000_000),
+  monthlyInterestRatePercent: z.number().min(0).max(100),
+  minInstallments: z.number().int().min(1).max(120),
+  maxInstallments: z.number().int().min(1).max(120),
+  defaultInstallments: z.number().int().min(1).max(120),
+})
+
+const IMAGE_MIME_EXT: Record<string, string> = {
+  "image/jpeg": "jpg",
+  "image/png": "png",
+  "image/webp": "webp",
+  "image/avif": "avif",
+  "image/gif": "gif",
+}
+
+const IMAGE_EXT_MIME: Record<string, string> = {
+  ".jpg": "image/jpeg",
+  ".jpeg": "image/jpeg",
+  ".png": "image/png",
+  ".webp": "image/webp",
+  ".avif": "image/avif",
+  ".gif": "image/gif",
+}
 
 function dayKey(date = new Date()): string { return date.toISOString().slice(0, 10) }
 function parseDateKey(key: string): Date { return new Date(`${key}T00:00:00.000Z`) }
@@ -165,16 +280,327 @@ function maskTopBidderName(email?: string, fullName?: string, userId?: string): 
   return String(userId ?? "USER")
 }
 
-function buildInstallmentPlan(principalIrr: number, months: number) {
-  const safeMonths = Math.max(6, Math.min(60, Math.trunc(months)))
-  const totalRepayableIrr = Math.round(principalIrr * (1 + CAR_LOAN_MONTHLY_RATE * safeMonths))
-  const monthlyInstallmentIrr = Math.ceil(totalRepayableIrr / safeMonths)
-  return {
-    installmentCount: safeMonths,
-    interestRateMonthlyPercent: CAR_LOAN_MONTHLY_RATE * 100,
-    totalRepayableIrr,
-    monthlyInstallmentIrr,
+function uploadsDirPath(): string {
+  return path.resolve(process.cwd(), env.UPLOADS_DIR)
+}
+
+function buildUploadUrl(request: { headers: Record<string, unknown>; protocol: string }, fileName: string): string {
+  if (env.PUBLIC_API_BASE_URL) return `${env.PUBLIC_API_BASE_URL.replace(/\/+$/, "")}/uploads/${fileName}`
+  const forwardedHost = request.headers["x-forwarded-host"]
+  const hostRaw = typeof forwardedHost === "string" ? forwardedHost : String(request.headers.host ?? "localhost:4000")
+  const host = hostRaw.split(",")[0]?.trim() || "localhost:4000"
+  const forwardedProto = request.headers["x-forwarded-proto"]
+  const protocolRaw = typeof forwardedProto === "string" ? forwardedProto : request.protocol
+  const protocol = protocolRaw.split(",")[0]?.trim() || "http"
+  return `${protocol}://${host}/api/v1/uploads/${fileName}`
+}
+
+function uniqueImageUrls(input: string[]): string[] {
+  const out: string[] = []
+  const seen = new Set<string>()
+  for (const raw of input) {
+    const value = raw.trim()
+    if (!value || seen.has(value)) continue
+    seen.add(value)
+    out.push(value)
   }
+  return out
+}
+
+function createUniqueSlideEntryNumbers(existing: Set<number>, count: number): number[] {
+  const out: number[] = []
+  while (out.length < count) {
+    const n = 100_000 + Math.floor(Math.random() * 900_000)
+    if (existing.has(n)) continue
+    existing.add(n)
+    out.push(n)
+  }
+  return out
+}
+
+function attachShowroomOrderToActiveSlideDraw(
+  store: RouteContext["store"],
+  args: { orderId: string; vehicleId: string; userId: string; ticketCount?: number; at?: string },
+): { drawId?: string; entryNumbers: number[] } {
+  const draw = store.getSlideDraws().find((item) => item.status === "scheduled")
+  if (!draw) return { entryNumbers: [] }
+  const now = args.at ?? nowIso()
+  const count = Math.max(1, Math.trunc(args.ticketCount ?? 1))
+  const existingNumbers = new Set<number>((draw.entries ?? []).map((entry) => entry.entryNumber))
+  const assignedNumbers = createUniqueSlideEntryNumbers(existingNumbers, count)
+  const newEntries = assignedNumbers.map((entryNumber) => ({
+    entryNumber,
+    userId: args.userId,
+    createdAt: now,
+    sourceType: "showroom_purchase" as const,
+    sourceOrderId: args.orderId,
+    sourceVehicleId: args.vehicleId,
+  }))
+  draw.entries = [...(draw.entries ?? []), ...newEntries]
+  draw.updatedAt = now
+  store.slideDraws.set(draw.id, draw)
+  return { drawId: draw.id, entryNumbers: assignedNumbers }
+}
+
+function plusMonthsIso(baseIso: string, months: number): string {
+  const base = new Date(baseIso)
+  const next = new Date(base.getTime())
+  next.setUTCMonth(next.getUTCMonth() + months)
+  return next.toISOString()
+}
+
+function buildLoanInstallments(args: {
+  principalIrr: number
+  totalRepayableIrr: number
+  installmentCount: number
+  baseDateIso: string
+}): LoanInstallment[] {
+  const count = Math.max(1, Math.trunc(args.installmentCount))
+  const principalTotal = Math.max(0, Math.trunc(args.principalIrr))
+  const repayableTotal = Math.max(0, Math.trunc(args.totalRepayableIrr))
+
+  const basePrincipalPart = Math.floor(principalTotal / count)
+  const principalRemainder = principalTotal - basePrincipalPart * count
+  const baseAmountPart = Math.floor(repayableTotal / count)
+  const amountRemainder = repayableTotal - baseAmountPart * count
+
+  const out: LoanInstallment[] = []
+  for (let i = 0; i < count; i += 1) {
+    const principalIrr = basePrincipalPart + (i < principalRemainder ? 1 : 0)
+    const amountIrr = baseAmountPart + (i < amountRemainder ? 1 : 0)
+    const interestIrr = Math.max(0, amountIrr - principalIrr)
+    out.push({
+      installmentNumber: i + 1,
+      dueAt: plusMonthsIso(args.baseDateIso, i + 1),
+      amountIrr,
+      principalIrr,
+      interestIrr,
+      paidAmountIrr: 0,
+      paidPrincipalIrr: 0,
+      status: "pending",
+    })
+  }
+  return out
+}
+
+function normalizeLoan(loan: AutoLoan, now = nowIso()): AutoLoan {
+  const total = Math.max(0, Math.trunc(loan.totalRepayableIrr ?? loan.outstandingIrr ?? 0))
+  const principal = Math.max(0, Math.trunc(loan.principalIrr))
+  const count = Math.max(1, Math.trunc(loan.installmentCount ?? 1))
+  const installments = Array.isArray(loan.installments) && loan.installments.length > 0
+    ? loan.installments
+    : buildLoanInstallments({
+      principalIrr: principal,
+      totalRepayableIrr: total,
+      installmentCount: count,
+      baseDateIso: loan.createdAt,
+    })
+
+  let repaidIrr = 0
+  let paidInstallmentsCount = 0
+  let overdueInstallmentsCount = 0
+  let nextInstallmentNumber: number | undefined
+  let nextDueAt: string | undefined
+  let maxDueAt = loan.dueAt ?? loan.createdAt
+
+  for (const item of installments) {
+    item.paidAmountIrr = Math.max(0, Math.min(item.amountIrr, Math.trunc(item.paidAmountIrr ?? 0)))
+    item.paidPrincipalIrr = Math.max(0, Math.min(item.principalIrr, Math.trunc(item.paidPrincipalIrr ?? item.paidAmountIrr)))
+    if (item.paidAmountIrr >= item.amountIrr) {
+      item.status = "paid"
+      if (!item.paidAt) item.paidAt = now
+      paidInstallmentsCount += 1
+    } else if (item.paidAmountIrr > 0) {
+      item.status = item.dueAt < now ? "overdue" : "partial"
+      if (item.status === "overdue") overdueInstallmentsCount += 1
+    } else {
+      item.status = item.dueAt < now ? "overdue" : "pending"
+      if (item.status === "overdue") overdueInstallmentsCount += 1
+    }
+    repaidIrr += item.paidAmountIrr
+    if (item.status !== "paid" && nextInstallmentNumber === undefined) {
+      nextInstallmentNumber = item.installmentNumber
+      nextDueAt = item.dueAt
+    }
+    if (item.dueAt > maxDueAt) maxDueAt = item.dueAt
+  }
+
+  loan.installments = installments
+  loan.totalRepayableIrr = total
+  loan.repaidIrr = repaidIrr
+  loan.outstandingIrr = Math.max(0, total - repaidIrr)
+  loan.paidInstallmentsCount = paidInstallmentsCount
+  loan.overdueInstallmentsCount = overdueInstallmentsCount
+  loan.nextInstallmentNumber = nextInstallmentNumber
+  loan.nextDueAt = nextDueAt
+  loan.monthlyInstallmentIrr = loan.monthlyInstallmentIrr ?? (installments[0]?.amountIrr ?? 0)
+  loan.dueAt = maxDueAt
+  if (loan.outstandingIrr <= 0) loan.status = "repaid"
+
+  return loan
+}
+
+function applyLoanRepayment(
+  loan: AutoLoan,
+  amountIrr: number,
+  now: string,
+  targetInstallmentNumber?: number,
+): { repaidIrr: number; principalPaidIrr: number; remainingIrr: number; paidInstallments: number[] } {
+  normalizeLoan(loan, now)
+  const remainingStart = Math.max(0, Math.trunc(amountIrr))
+  if (remainingStart <= 0 || loan.outstandingIrr <= 0) {
+    return { repaidIrr: 0, principalPaidIrr: 0, remainingIrr: remainingStart, paidInstallments: [] }
+  }
+
+  const candidates = (loan.installments ?? [])
+    .filter((item) => item.status !== "paid")
+    .sort((a, b) => {
+      if (targetInstallmentNumber !== undefined) {
+        const aScore = a.installmentNumber === targetInstallmentNumber ? 0 : 1
+        const bScore = b.installmentNumber === targetInstallmentNumber ? 0 : 1
+        if (aScore !== bScore) return aScore - bScore
+      }
+      if (a.dueAt === b.dueAt) return a.installmentNumber - b.installmentNumber
+      return a.dueAt < b.dueAt ? -1 : 1
+    })
+
+  let remainingIrr = remainingStart
+  let repaidIrr = 0
+  let principalPaidIrr = 0
+  const paidInstallments: number[] = []
+
+  for (const item of candidates) {
+    if (remainingIrr <= 0) break
+    const installmentRemaining = Math.max(0, item.amountIrr - item.paidAmountIrr)
+    if (installmentRemaining <= 0) continue
+    const applied = Math.min(remainingIrr, installmentRemaining)
+    if (applied <= 0) continue
+
+    const paidPrincipal = Math.max(0, Math.min(item.principalIrr, Math.trunc(item.paidPrincipalIrr ?? item.paidAmountIrr)))
+    const principalRemaining = Math.max(0, item.principalIrr - paidPrincipal)
+    const paidInterest = Math.max(0, item.paidAmountIrr - paidPrincipal)
+    const interestRemaining = Math.max(0, item.interestIrr - paidInterest)
+    const interestDelta = Math.min(applied, interestRemaining)
+    const principalDelta = Math.min(principalRemaining, Math.max(0, applied - interestDelta))
+
+    item.paidAmountIrr += applied
+    item.paidPrincipalIrr = paidPrincipal + principalDelta
+    if (item.paidAmountIrr >= item.amountIrr) {
+      item.paidAt = now
+      paidInstallments.push(item.installmentNumber)
+    }
+
+    remainingIrr -= applied
+    repaidIrr += applied
+    principalPaidIrr += principalDelta
+  }
+
+  normalizeLoan(loan, now)
+  loan.lastRepaymentAt = repaidIrr > 0 ? now : loan.lastRepaymentAt
+  loan.updatedAt = now
+
+  return {
+    repaidIrr,
+    principalPaidIrr,
+    remainingIrr,
+    paidInstallments,
+  }
+}
+
+function parseStoredImageUrls(data: Record<string, unknown>): string[] {
+  const raw = data["imageUrls"]
+  if (Array.isArray(raw)) {
+    return uniqueImageUrls(raw.filter((item): item is string => typeof item === "string"))
+  }
+  const imageUrl = typeof data["imageUrl"] === "string" ? data["imageUrl"].trim() : ""
+  return imageUrl ? [imageUrl] : []
+}
+
+function resolveShowroomImages(input: {
+  imageUrl?: string
+  imageUrls?: string[]
+  primaryImageIndex?: number
+}, existing?: Record<string, unknown>) {
+  let imageUrls: string[] = []
+  if (input.imageUrls) {
+    imageUrls = uniqueImageUrls(input.imageUrls)
+  } else if (input.imageUrl !== undefined) {
+    imageUrls = uniqueImageUrls([input.imageUrl])
+  } else if (existing) {
+    imageUrls = parseStoredImageUrls(existing)
+  }
+
+  if (!imageUrls.length) {
+    return {
+      imageUrls: [] as string[],
+      primaryImageIndex: 0,
+      imageUrl: "",
+    }
+  }
+
+  const defaultIndexRaw = existing ? Number(existing["primaryImageIndex"] ?? 0) : 0
+  const defaultIndex = Number.isFinite(defaultIndexRaw) ? Math.trunc(defaultIndexRaw) : 0
+  const requestedIndexRaw = input.primaryImageIndex ?? defaultIndex
+  const requestedIndex = Number.isFinite(requestedIndexRaw) ? Math.trunc(requestedIndexRaw) : 0
+  const primaryImageIndex = Math.max(0, Math.min(imageUrls.length - 1, requestedIndex))
+
+  return {
+    imageUrls,
+    primaryImageIndex,
+    imageUrl: imageUrls[primaryImageIndex] ?? imageUrls[0] ?? "",
+  }
+}
+
+function normalizeShowroomVehicle(vehicle: {
+  id: string
+  sourceType: "lottery_winback" | "external_purchase"
+  status: "available" | "reserved" | "sold" | "archived"
+  vehicle: Record<string, unknown>
+  acquisitionCostIrr?: number
+  listedPriceIrr?: number
+  listedPriceGoldSot?: number
+  createdAt: string
+  updatedAt: string
+}) {
+  const data = vehicle.vehicle ?? {}
+  const resolvedImages = resolveShowroomImages({}, data)
+  const mileageKmRaw = Number(data["mileageKm"] ?? 0)
+  const mileageKm = Number.isFinite(mileageKmRaw) && mileageKmRaw >= 0 ? mileageKmRaw : 0
+
+  const transmissionRaw = data["transmission"]
+  const transmission = transmissionRaw === "manual" ? "manual" : "automatic"
+
+  const fuelRaw = data["fuelType"]
+  const fuelType = fuelRaw === "hybrid" || fuelRaw === "electric" || fuelRaw === "diesel" ? fuelRaw : "gasoline"
+
+  const normalized = {
+    ...vehicle,
+    vehicle: {
+      title: String(data["title"] ?? "خودرو"),
+      imageUrl: resolvedImages.imageUrl,
+      imageUrls: resolvedImages.imageUrls,
+      primaryImageIndex: resolvedImages.primaryImageIndex,
+      model: String(data["model"] ?? data["title"] ?? "نامشخص"),
+      year: Number(data["year"] ?? new Date().getFullYear()),
+      city: String(data["city"] ?? "تهران"),
+      mileageKm,
+      isNew: Boolean(data["isNew"] ?? mileageKm <= 100),
+      transmission,
+      fuelType,
+      participantsCount: Math.max(0, Number(data["participantsCount"] ?? 0)),
+      raffleParticipantsCount: Math.max(0, Number(data["raffleParticipantsCount"] ?? 0)),
+      raffle: {
+        cashbackPercent: Math.max(0, Number((data["raffle"] as Record<string, unknown> | undefined)?.["cashbackPercent"] ?? 20)),
+        cashbackToGoldPercent: Math.max(0, Number((data["raffle"] as Record<string, unknown> | undefined)?.["cashbackToGoldPercent"] ?? 30)),
+        goldSotBack: Math.max(0, Number((data["raffle"] as Record<string, unknown> | undefined)?.["goldSotBack"] ?? 0)),
+        tomanPerGoldSot: Math.max(1, Number((data["raffle"] as Record<string, unknown> | undefined)?.["tomanPerGoldSot"] ?? 100_000)),
+        mainPrizeTitle: String((data["raffle"] as Record<string, unknown> | undefined)?.["mainPrizeTitle"] ?? "جایزه اصلی خودرو"),
+        mainPrizeValueIrr: Math.max(0, Number((data["raffle"] as Record<string, unknown> | undefined)?.["mainPrizeValueIrr"] ?? 0)),
+      },
+    },
+  }
+
+  return normalized
 }
 
 function getOrInitWelcome(store: RouteContext["store"], userId: string) {
@@ -268,9 +694,245 @@ export async function registerEnterpriseRoutes(ctx: RouteContext): Promise<void>
     return { terms: store.termsText, disclaimer: store.disclaimerText }
   })
 
+  // Banners content
+  app.get("/admin/content/banners", { preHandler: [app.adminOnly] }, async () => ({
+    banners: store.bannersContent,
+  }))
+
+  app.put("/admin/content/banners", { preHandler: [app.adminOnly] }, async (request: any) => {
+    const body = request.body as { banners: typeof store.bannersContent }
+    if (Array.isArray(body?.banners)) store.bannersContent = body.banners
+    return { banners: store.bannersContent }
+  })
+
+  // Public banners endpoint
+  app.get("/content/banners", async () => ({
+    banners: store.bannersContent.filter((b) => b.active),
+  }))
+
+  // SEO global content
+  app.get("/admin/content/seo-global", { preHandler: [app.adminOnly] }, async () => store.seoGlobalContent)
+
+  app.put("/admin/content/seo-global", { preHandler: [app.adminOnly] }, async (request: any) => {
+    const body = request.body as Partial<typeof store.seoGlobalContent>
+    store.seoGlobalContent = { ...store.seoGlobalContent, ...body }
+    return store.seoGlobalContent
+  })
+
+  app.get("/content/home", async () => ({ content: store.homeContent }))
+
+  app.get("/admin/content/home", { preHandler: [app.adminOnly] }, async () => ({ content: store.homeContent }))
+
+  app.put("/admin/content/home", { preHandler: [app.adminOnly] }, async (request, reply) => {
+    const parsed = homeContentSchema.safeParse(request.body)
+    if (!parsed.success) return reply.code(400).send({ error: "INVALID_INPUT", details: parsed.error.flatten() })
+    store.homeContent = parsed.data
+    return { content: store.homeContent }
+  })
+
+  app.get("/payments/card-to-card/config", { preHandler: [app.authenticate] }, async () => ({
+    destinationCard: getCardToCardDestinationCard(store),
+  }))
+
+  app.get("/payments/online-gateways", { preHandler: [app.authenticate] }, async () => {
+    store.paymentConfig = normalizePaymentConfig(store.paymentConfig, {
+      fallbackCardToCardDestination: env.CARD_TO_CARD_DESTINATION_CARD,
+    })
+    return {
+      defaultOnlineGatewayId: store.paymentConfig.defaultOnlineGatewayId,
+      items: store.paymentConfig.onlineGateways
+        .filter((item) => item.enabled)
+        .map((item) => ({
+          id: item.id,
+          code: item.code,
+          provider: item.provider,
+          displayName: item.displayName,
+          sandbox: item.sandbox,
+          checkoutUrl: item.checkoutUrl,
+          callbackUrl: item.callbackUrl,
+          minAmountIrr: item.minAmountIrr,
+          maxAmountIrr: item.maxAmountIrr,
+          feePercent: item.feePercent,
+          feeFixedIrr: item.feeFixedIrr,
+          description: item.description,
+        })),
+    }
+  })
+
+  async function handleImageUpload(request: { headers: Record<string, unknown>; protocol: string; body: unknown }, reply: { code: (statusCode: number) => { send: (payload: unknown) => unknown } }) {
+    const parsed = imageUploadSchema.safeParse(request.body)
+    if (!parsed.success) return reply.code(400).send({ error: "INVALID_INPUT", details: parsed.error.flatten() })
+
+    const normalizedBase64 = parsed.data.contentBase64.replace(/^data:[^;]+;base64,/, "")
+    const ext = IMAGE_MIME_EXT[parsed.data.mimeType]
+    if (!ext) return reply.code(400).send({ error: "UNSUPPORTED_MIME_TYPE" })
+
+    let buffer: Buffer
+    try {
+      buffer = Buffer.from(normalizedBase64, "base64")
+    } catch {
+      return reply.code(400).send({ error: "INVALID_BASE64" })
+    }
+    if (!buffer.length) return reply.code(400).send({ error: "EMPTY_FILE" })
+    if (buffer.length > env.UPLOAD_IMAGE_MAX_BYTES) {
+      return reply.code(413).send({ error: "IMAGE_TOO_LARGE", maxBytes: env.UPLOAD_IMAGE_MAX_BYTES })
+    }
+
+    await mkdir(uploadsDirPath(), { recursive: true })
+    const fileName = `${id("img")}.${ext}`
+    const filePath = path.join(uploadsDirPath(), fileName)
+    await writeFile(filePath, buffer)
+    return {
+      url: buildUploadUrl(request, fileName),
+      fileName,
+      mimeType: parsed.data.mimeType,
+      size: buffer.length,
+    }
+  }
+
+  app.post("/admin/uploads/image", { preHandler: [app.adminOnly] }, async (request, reply) => {
+    return handleImageUpload(request, reply)
+  })
+
+  app.post("/uploads/image", { preHandler: [app.authenticate] }, async (request, reply) => {
+    return handleImageUpload(request, reply)
+  })
+
+  app.get("/uploads/:fileName", async (request, reply) => {
+    const params = request.params as { fileName: string }
+    const fileName = params.fileName.trim()
+    if (!/^[a-zA-Z0-9._-]+$/.test(fileName)) return reply.code(400).send({ error: "INVALID_FILE_NAME" })
+    const filePath = path.join(uploadsDirPath(), fileName)
+    try {
+      const data = await readFile(filePath)
+      const ext = path.extname(fileName).toLowerCase()
+      const mimeType = IMAGE_EXT_MIME[ext] ?? "application/octet-stream"
+      reply.header("Cache-Control", "public, max-age=31536000, immutable")
+      reply.header("Cross-Origin-Resource-Policy", "cross-origin")
+      return reply.type(mimeType).send(data)
+    } catch {
+      return reply.code(404).send({ error: "FILE_NOT_FOUND" })
+    }
+  })
+
+  app.get("/checks/my-listings", { preHandler: [app.authenticate] }, async (request) => {
+    return { items: store.getCheckListingsByUser(request.user.sub) }
+  })
+
+  app.post("/checks/listings", { preHandler: [app.authenticate] }, async (request, reply) => {
+    const parsed = checkCreateSchema.safeParse(request.body)
+    if (!parsed.success) return reply.code(400).send({ error: "INVALID_INPUT", details: parsed.error.flatten() })
+    const user = store.users.get(request.user.sub)
+    if (!user) return reply.code(404).send({ error: "USER_NOT_FOUND" })
+
+    const now = nowIso()
+    const listing = {
+      id: id("chk"),
+      ownerUserId: user.id,
+      ownerEmail: user.email,
+      ownerName: parsed.data.ownerName,
+      ownerPhone: parsed.data.ownerPhone,
+      vehicleModel: parsed.data.vehicleModel,
+      vehicleYear: parsed.data.vehicleYear,
+      city: parsed.data.city,
+      suggestedPriceIrr: parsed.data.suggestedPriceIrr,
+      deliveryDate: parsed.data.deliveryDate,
+      notes: parsed.data.notes,
+      status: "pending_review" as const,
+      createdAt: now,
+      updatedAt: now,
+    }
+    store.checkListings.set(listing.id, listing)
+
+    pushLiveEvent(store, {
+      type: "system.info",
+      level: "info",
+      message: "درخواست حواله خودرو جدید ثبت شد",
+      data: { listingId: listing.id, userId: listing.ownerUserId, vehicleModel: listing.vehicleModel },
+    })
+
+    return reply.code(201).send({ listing })
+  })
+
+  app.get("/admin/checks/listings", { preHandler: [app.adminOnly] }, async () => ({
+    items: Array.from(store.checkListings.values()).sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1)),
+  }))
+
+  app.post("/admin/checks/listings/:listingId/status", { preHandler: [app.adminOnly] }, async (request, reply) => {
+    const params = request.params as { listingId: string }
+    const parsed = checkStatusSchema.safeParse(request.body)
+    if (!parsed.success) return reply.code(400).send({ error: "INVALID_INPUT", details: parsed.error.flatten() })
+    const listing = store.checkListings.get(params.listingId)
+    if (!listing) return reply.code(404).send({ error: "LISTING_NOT_FOUND" })
+    listing.status = parsed.data.status
+    listing.updatedAt = nowIso()
+    store.checkListings.set(listing.id, listing)
+
+    pushUserNotification(store, {
+      userId: listing.ownerUserId,
+      title: "به‌روزرسانی وضعیت حواله خودرو",
+      body: `وضعیت درخواست ${listing.vehicleModel} به ${listing.status} تغییر کرد.`,
+      kind: parsed.data.status === "approved" || parsed.data.status === "completed" ? "success" : "info",
+    })
+    return { listing }
+  })
+
   app.get("/loans/me", { preHandler: [app.authenticate] }, async (request) => {
-    const items = Array.from(store.autoLoans.values()).filter((l) => l.userId === request.user.sub).sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1))
+    const now = nowIso()
+    const items = Array.from(store.autoLoans.values())
+      .filter((l) => l.userId === request.user.sub)
+      .map((loan) => normalizeLoan(loan, now))
+      .sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1))
+    for (const loan of items) store.autoLoans.set(loan.id, loan)
     return { items }
+  })
+
+  app.get("/loans/summary/me", { preHandler: [app.authenticate] }, async (request) => {
+    const now = nowIso()
+    const items = Array.from(store.autoLoans.values())
+      .filter((l) => l.userId === request.user.sub)
+      .map((loan) => normalizeLoan(loan, now))
+    for (const loan of items) store.autoLoans.set(loan.id, loan)
+
+    const active = items.filter((loan) => loan.status === "active" || loan.status === "approved")
+    const summary = {
+      totalLoans: items.length,
+      activeLoans: active.length,
+      overdueLoans: active.filter((loan) => (loan.overdueInstallmentsCount ?? 0) > 0).length,
+      totalOutstandingIrr: active.reduce((sum, loan) => sum + (loan.outstandingIrr ?? 0), 0),
+      totalOverdueInstallments: active.reduce((sum, loan) => sum + (loan.overdueInstallmentsCount ?? 0), 0),
+      nextDueAt: active
+        .map((loan) => loan.nextDueAt)
+        .filter((value): value is string => Boolean(value))
+        .sort((a, b) => (a < b ? -1 : 1))[0],
+    }
+    return { summary }
+  })
+
+  app.get("/loans/:loanId/installments", { preHandler: [app.authenticate] }, async (request, reply) => {
+    const params = request.params as { loanId: string }
+    const loan = store.autoLoans.get(params.loanId)
+    if (!loan || loan.userId !== request.user.sub) return reply.code(404).send({ error: "LOAN_NOT_FOUND" })
+    const now = nowIso()
+    normalizeLoan(loan, now)
+    store.autoLoans.set(loan.id, loan)
+    return {
+      loanId: loan.id,
+      status: loan.status,
+      totals: {
+        principalIrr: loan.principalIrr,
+        totalRepayableIrr: loan.totalRepayableIrr ?? 0,
+        repaidIrr: loan.repaidIrr ?? 0,
+        outstandingIrr: loan.outstandingIrr,
+      },
+      installments: loan.installments ?? [],
+    }
+  })
+
+  app.get("/loans/config", async () => {
+    const config = normalizeLoanConfig(store.loanConfig)
+    store.loanConfig = config
+    return { config }
   })
 
   app.post("/loans/request", { preHandler: [app.authenticate] }, async (request, reply) => {
@@ -279,20 +941,43 @@ export async function registerEnterpriseRoutes(ctx: RouteContext): Promise<void>
     const user = store.users.get(request.user.sub)
     if (!user) return reply.code(404).send({ error: "USER_NOT_FOUND" })
     ensureUserDefaults(user)
+    const loanConfig = normalizeLoanConfig(store.loanConfig)
+    store.loanConfig = loanConfig
+    if (!loanConfig.enabled) return reply.code(403).send({ error: "LOAN_DISABLED" })
+    if (parsed.data.amount < loanConfig.minLoanIrr || parsed.data.amount > loanConfig.maxLoanIrr) {
+      return reply.code(400).send({ error: "LOAN_AMOUNT_OUT_OF_RANGE", minLoanIrr: loanConfig.minLoanIrr, maxLoanIrr: loanConfig.maxLoanIrr })
+    }
+
     const vip = recalcVip(user)
-    if (vip.id < 3) return reply.code(403).send({ error: "VIP_LEVEL_REQUIRED", requiredLevel: 3 })
+    if (vip.id < loanConfig.requiredVipLevelId) {
+      return reply.code(403).send({ error: "VIP_LEVEL_REQUIRED", requiredLevel: loanConfig.requiredVipLevelId })
+    }
+
+    const requestedInstallments = parsed.data.dueDays ? Math.round(parsed.data.dueDays / 30) : loanConfig.defaultInstallments
+    const plan = buildLoanPlan(loanConfig, parsed.data.amount, requestedInstallments)
     const now = nowIso()
     const loan = {
       id: id("loan"),
       userId: user.id,
       principalIrr: parsed.data.amount,
-      outstandingIrr: parsed.data.amount,
+      outstandingIrr: plan.totalRepayableIrr,
+      installmentCount: plan.installmentCount,
+      monthlyInstallmentIrr: plan.monthlyInstallmentIrr,
+      interestRateMonthlyPercent: plan.interestRateMonthlyPercent,
+      totalRepayableIrr: plan.totalRepayableIrr,
       status: "pending" as const,
       restrictedUsage: true,
       createdAt: now,
       updatedAt: now,
-      dueAt: new Date(Date.now() + (parsed.data.dueDays ?? 60) * 24 * 60 * 60 * 1000).toISOString(),
+      dueAt: plusMonthsIso(now, plan.installmentCount),
+      installments: buildLoanInstallments({
+        principalIrr: parsed.data.amount,
+        totalRepayableIrr: plan.totalRepayableIrr,
+        installmentCount: plan.installmentCount,
+        baseDateIso: now,
+      }),
     }
+    normalizeLoan(loan, now)
     store.autoLoans.set(loan.id, loan)
     return { loan }
   })
@@ -304,6 +989,12 @@ export async function registerEnterpriseRoutes(ctx: RouteContext): Promise<void>
     const loan = store.autoLoans.get(params.loanId)
     if (!loan || loan.userId !== request.user.sub) return reply.code(404).send({ error: "LOAN_NOT_FOUND" })
     if (!(["active", "approved"] as string[]).includes(loan.status)) return reply.code(400).send({ error: "LOAN_NOT_REPAYABLE" })
+    const now = nowIso()
+    normalizeLoan(loan, now)
+    if (loan.outstandingIrr <= 0) return reply.code(400).send({ error: "LOAN_ALREADY_REPAID" })
+    if (parsed.data.installmentNumber !== undefined && !(loan.installments ?? []).some((i) => i.installmentNumber === parsed.data.installmentNumber)) {
+      return reply.code(400).send({ error: "INSTALLMENT_NOT_FOUND" })
+    }
     const user = store.users.get(request.user.sub)
     if (!user) return reply.code(404).send({ error: "USER_NOT_FOUND" })
     ensureUserDefaults(user)
@@ -312,23 +1003,88 @@ export async function registerEnterpriseRoutes(ctx: RouteContext): Promise<void>
     const withdrawable = user.walletBalance - (user.loanLockedBalance ?? 0)
     if (withdrawable < repayAmount) return reply.code(400).send({ error: "INSUFFICIENT_WITHDRAWABLE_BALANCE", withdrawable })
 
-    user.walletBalance -= repayAmount
-    user.loanLockedBalance = Math.max(0, (user.loanLockedBalance ?? 0) - repayAmount)
-    user.updatedAt = nowIso()
+    const repayment = applyLoanRepayment(loan, repayAmount, now, parsed.data.installmentNumber)
+    if (repayment.repaidIrr <= 0) return reply.code(400).send({ error: "LOAN_NOT_REPAYABLE" })
+
+    user.walletBalance -= repayment.repaidIrr
+    user.loanLockedBalance = Math.max(0, (user.loanLockedBalance ?? 0) - repayment.principalPaidIrr)
+    user.updatedAt = now
     store.users.set(user.id, user)
 
-    loan.outstandingIrr -= repayAmount
     loan.status = loan.outstandingIrr <= 0 ? "repaid" : "active"
-    loan.updatedAt = nowIso()
+    loan.updatedAt = now
     store.autoLoans.set(loan.id, loan)
 
     const txId = id("wtx")
-    store.walletTx.set(txId, { id: txId, userId: user.id, type: "loan_repay", amount: -repayAmount, status: "completed", createdAt: nowIso(), meta: { loanId: loan.id } })
+    store.walletTx.set(txId, {
+      id: txId,
+      userId: user.id,
+      type: "loan_repay",
+      amount: -repayment.repaidIrr,
+      status: "completed",
+      createdAt: now,
+      meta: {
+        loanId: loan.id,
+        principalPaidIrr: repayment.principalPaidIrr,
+        targetInstallmentNumber: parsed.data.installmentNumber ?? 0,
+        settledInstallments: repayment.paidInstallments.join(","),
+      },
+    })
 
-    return { loan, repaid: repayAmount, balances: { walletBalance: user.walletBalance, loanLockedBalance: user.loanLockedBalance } }
+    return {
+      loan,
+      repaid: repayment.repaidIrr,
+      principalPaid: repayment.principalPaidIrr,
+      settledInstallments: repayment.paidInstallments,
+      balances: { walletBalance: user.walletBalance, loanLockedBalance: user.loanLockedBalance },
+    }
   })
 
-  app.get("/admin/loans", { preHandler: [app.adminOnly] }, async () => ({ items: Array.from(store.autoLoans.values()).sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1)) }))
+  app.get("/admin/loans/config", { preHandler: [app.adminOnly] }, async () => {
+    const config = normalizeLoanConfig(store.loanConfig)
+    store.loanConfig = config
+    return { config }
+  })
+
+  app.put("/admin/loans/config", { preHandler: [app.adminOnly] }, async (request, reply) => {
+    const parsed = adminLoanConfigSchema.safeParse(request.body)
+    if (!parsed.success) return reply.code(400).send({ error: "INVALID_INPUT", details: parsed.error.flatten() })
+    if (parsed.data.minLoanIrr > parsed.data.maxLoanIrr) {
+      return reply.code(400).send({ error: "LOAN_RANGE_INVALID" })
+    }
+    if (parsed.data.minInstallments > parsed.data.maxInstallments) {
+      return reply.code(400).send({ error: "INSTALLMENT_RANGE_INVALID" })
+    }
+    if (
+      parsed.data.defaultInstallments < parsed.data.minInstallments ||
+      parsed.data.defaultInstallments > parsed.data.maxInstallments
+    ) {
+      return reply.code(400).send({ error: "DEFAULT_INSTALLMENTS_OUT_OF_RANGE" })
+    }
+
+    const config = normalizeLoanConfig(parsed.data)
+    store.loanConfig = config
+    return { config }
+  })
+
+  app.get("/admin/loans", { preHandler: [app.adminOnly] }, async () => {
+    const now = nowIso()
+    const items = Array.from(store.autoLoans.values())
+      .map((loan) => normalizeLoan(loan, now))
+      .sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1))
+    for (const loan of items) store.autoLoans.set(loan.id, loan)
+    const summary = {
+      totalLoans: items.length,
+      pendingLoans: items.filter((loan) => loan.status === "pending").length,
+      activeLoans: items.filter((loan) => loan.status === "active" || loan.status === "approved").length,
+      overdueLoans: items.filter((loan) => (loan.overdueInstallmentsCount ?? 0) > 0 && (loan.status === "active" || loan.status === "approved")).length,
+      defaultedLoans: items.filter((loan) => loan.status === "defaulted").length,
+      totalOutstandingIrr: items
+        .filter((loan) => loan.status === "active" || loan.status === "approved")
+        .reduce((sum, loan) => sum + loan.outstandingIrr, 0),
+    }
+    return { summary, items }
+  })
 
   app.post("/admin/loans/:loanId/approve", { preHandler: [app.adminOnly] }, async (request, reply) => {
     const params = request.params as { loanId: string }
@@ -338,16 +1094,26 @@ export async function registerEnterpriseRoutes(ctx: RouteContext): Promise<void>
     const user = store.users.get(loan.userId)
     if (!user) return reply.code(404).send({ error: "USER_NOT_FOUND" })
     ensureUserDefaults(user)
+    const now = nowIso()
+    normalizeLoan(loan, now)
     loan.status = "active"
     loan.approvedBy = request.user.sub
-    loan.updatedAt = nowIso()
+    loan.updatedAt = now
     store.autoLoans.set(loan.id, loan)
     user.walletBalance += loan.principalIrr
     user.loanLockedBalance = (user.loanLockedBalance ?? 0) + loan.principalIrr
-    user.updatedAt = nowIso()
+    user.updatedAt = now
     store.users.set(user.id, user)
     const txId = id("wtx")
-    store.walletTx.set(txId, { id: txId, userId: user.id, type: "loan_credit", amount: loan.principalIrr, status: "completed", createdAt: nowIso(), meta: { loanId: loan.id, approvedBy: request.user.sub } })
+    store.walletTx.set(txId, {
+      id: txId,
+      userId: user.id,
+      type: "loan_credit",
+      amount: loan.principalIrr,
+      status: "completed",
+      createdAt: now,
+      meta: { loanId: loan.id, approvedBy: request.user.sub },
+    })
     return { loan }
   })
 
@@ -358,6 +1124,21 @@ export async function registerEnterpriseRoutes(ctx: RouteContext): Promise<void>
     if (loan.status !== "pending") return reply.code(400).send({ error: "LOAN_NOT_PENDING" })
     loan.status = "rejected"
     loan.approvedBy = request.user.sub
+    loan.updatedAt = nowIso()
+    store.autoLoans.set(loan.id, loan)
+    return { loan }
+  })
+
+  app.post("/admin/loans/:loanId/default", { preHandler: [app.adminOnly] }, async (request, reply) => {
+    const params = request.params as { loanId: string }
+    const loan = store.autoLoans.get(params.loanId)
+    if (!loan) return reply.code(404).send({ error: "LOAN_NOT_FOUND" })
+    if (!(loan.status === "active" || loan.status === "approved")) {
+      return reply.code(400).send({ error: "LOAN_NOT_DEFAULTABLE" })
+    }
+    normalizeLoan(loan, nowIso())
+    if ((loan.overdueInstallmentsCount ?? 0) <= 0) return reply.code(400).send({ error: "LOAN_NOT_OVERDUE" })
+    loan.status = "defaulted"
     loan.updatedAt = nowIso()
     store.autoLoans.set(loan.id, loan)
     return { loan }
@@ -494,38 +1275,76 @@ export async function registerEnterpriseRoutes(ctx: RouteContext): Promise<void>
     return { ticket }
   })
 
-  app.get("/showroom/vehicles", async () => ({ items: Array.from(store.showroomVehicles.values()).filter((v) => v.status === "available").sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1)) }))
+  app.get("/showroom/vehicles", async () => ({
+    items: Array.from(store.showroomVehicles.values())
+      .filter((v) => v.status === "available")
+      .sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1))
+      .map((v) => normalizeShowroomVehicle(v)),
+  }))
+
+  app.get("/showroom/vehicles/:vehicleId", async (request, reply) => {
+    const params = request.params as { vehicleId: string }
+    const vehicle = store.showroomVehicles.get(params.vehicleId)
+    if (!vehicle) return reply.code(404).send({ error: "VEHICLE_NOT_FOUND" })
+    return { item: normalizeShowroomVehicle(vehicle) }
+  })
 
   app.get("/admin/showroom/vehicles", { preHandler: [app.adminOnly] }, async () => ({
-    items: Array.from(store.showroomVehicles.values()).sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1)),
+    items: Array.from(store.showroomVehicles.values())
+      .sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1))
+      .map((v) => normalizeShowroomVehicle(v)),
   }))
 
   app.post("/admin/showroom/vehicles", { preHandler: [app.adminOnly] }, async (request, reply) => {
     const parsed = showroomCreateSchema.safeParse(request.body)
     if (!parsed.success) return reply.code(400).send({ error: "INVALID_INPUT", details: parsed.error.flatten() })
     if (!parsed.data.listedPriceIrr && !parsed.data.listedPriceGoldSot) return reply.code(400).send({ error: "PRICE_REQUIRED" })
+    const resolvedImages = resolveShowroomImages(parsed.data)
+    if (!resolvedImages.imageUrls.length) return reply.code(400).send({ error: "IMAGE_REQUIRED" })
+
+    const now = nowIso()
+    const mileageKm = parsed.data.mileageKm ?? 0
     const vehicle = {
       id: id("veh"),
       sourceType: parsed.data.sourceType,
       status: "available" as const,
       vehicle: {
         title: parsed.data.title,
-        imageUrl: parsed.data.imageUrl,
+        imageUrl: resolvedImages.imageUrl,
+        imageUrls: resolvedImages.imageUrls,
+        primaryImageIndex: resolvedImages.primaryImageIndex,
+        model: parsed.data.model ?? parsed.data.title,
+        year: parsed.data.year ?? new Date().getFullYear(),
+        city: parsed.data.city ?? "تهران",
+        mileageKm,
+        isNew: parsed.data.isNew ?? mileageKm <= 100,
+        transmission: parsed.data.transmission ?? "automatic",
+        fuelType: parsed.data.fuelType ?? "gasoline",
+        participantsCount: parsed.data.participantsCount ?? 0,
+        raffleParticipantsCount: parsed.data.raffleParticipantsCount ?? 0,
+        raffle: {
+          cashbackPercent: parsed.data.cashbackPercent ?? 20,
+          cashbackToGoldPercent: parsed.data.cashbackToGoldPercent ?? 30,
+          goldSotBack: parsed.data.goldSotBack ?? 0,
+          tomanPerGoldSot: parsed.data.tomanPerGoldSot ?? 100_000,
+          mainPrizeTitle: parsed.data.mainPrizeTitle ?? "جایزه اصلی خودرو",
+          mainPrizeValueIrr: parsed.data.mainPrizeValueIrr ?? 0,
+        },
       },
       acquisitionCostIrr: parsed.data.acquisitionCostIrr,
       listedPriceIrr: parsed.data.listedPriceIrr,
       listedPriceGoldSot: parsed.data.listedPriceGoldSot,
-      createdAt: nowIso(),
-      updatedAt: nowIso(),
+      createdAt: now,
+      updatedAt: now,
     }
     store.showroomVehicles.set(vehicle.id, vehicle)
     pushLiveEvent(store, {
       type: "showroom.vehicle",
       level: "info",
-      message: `خودروی جدید به نمایشگاه اضافه شد`,
+      message: "خودروی جدید به نمایشگاه اضافه شد",
       data: { vehicleId: vehicle.id, title: vehicle.vehicle.title, status: vehicle.status },
     })
-    return reply.code(201).send({ vehicle })
+    return reply.code(201).send({ vehicle: normalizeShowroomVehicle(vehicle) })
   })
 
   app.put("/admin/showroom/vehicles/:vehicleId", { preHandler: [app.adminOnly] }, async (request, reply) => {
@@ -534,21 +1353,68 @@ export async function registerEnterpriseRoutes(ctx: RouteContext): Promise<void>
     if (!parsed.success) return reply.code(400).send({ error: "INVALID_INPUT", details: parsed.error.flatten() })
     const vehicle = store.showroomVehicles.get(params.vehicleId)
     if (!vehicle) return reply.code(404).send({ error: "VEHICLE_NOT_FOUND" })
+
     if (parsed.data.title !== undefined) vehicle.vehicle = { ...vehicle.vehicle, title: parsed.data.title }
-    if (parsed.data.imageUrl !== undefined) vehicle.vehicle = { ...vehicle.vehicle, imageUrl: parsed.data.imageUrl }
+    if (
+      parsed.data.imageUrl !== undefined ||
+      parsed.data.imageUrls !== undefined ||
+      parsed.data.primaryImageIndex !== undefined
+    ) {
+      const resolvedImages = resolveShowroomImages(parsed.data, vehicle.vehicle)
+      if (!resolvedImages.imageUrls.length) return reply.code(400).send({ error: "IMAGE_REQUIRED" })
+      vehicle.vehicle = {
+        ...vehicle.vehicle,
+        imageUrl: resolvedImages.imageUrl,
+        imageUrls: resolvedImages.imageUrls,
+        primaryImageIndex: resolvedImages.primaryImageIndex,
+      }
+    }
+    if (parsed.data.model !== undefined) vehicle.vehicle = { ...vehicle.vehicle, model: parsed.data.model }
+    if (parsed.data.year !== undefined) vehicle.vehicle = { ...vehicle.vehicle, year: parsed.data.year }
+    if (parsed.data.city !== undefined) vehicle.vehicle = { ...vehicle.vehicle, city: parsed.data.city }
+    if (parsed.data.mileageKm !== undefined) vehicle.vehicle = { ...vehicle.vehicle, mileageKm: parsed.data.mileageKm }
+    if (parsed.data.isNew !== undefined) vehicle.vehicle = { ...vehicle.vehicle, isNew: parsed.data.isNew }
+    if (parsed.data.transmission !== undefined) vehicle.vehicle = { ...vehicle.vehicle, transmission: parsed.data.transmission }
+    if (parsed.data.fuelType !== undefined) vehicle.vehicle = { ...vehicle.vehicle, fuelType: parsed.data.fuelType }
+    if (parsed.data.participantsCount !== undefined) vehicle.vehicle = { ...vehicle.vehicle, participantsCount: parsed.data.participantsCount }
+    if (parsed.data.raffleParticipantsCount !== undefined) vehicle.vehicle = { ...vehicle.vehicle, raffleParticipantsCount: parsed.data.raffleParticipantsCount }
+    if (
+      parsed.data.cashbackPercent !== undefined ||
+      parsed.data.cashbackToGoldPercent !== undefined ||
+      parsed.data.goldSotBack !== undefined ||
+      parsed.data.tomanPerGoldSot !== undefined ||
+      parsed.data.mainPrizeTitle !== undefined ||
+      parsed.data.mainPrizeValueIrr !== undefined
+    ) {
+      const currentRaffle = (vehicle.vehicle["raffle"] as Record<string, unknown> | undefined) ?? {}
+      vehicle.vehicle = {
+        ...vehicle.vehicle,
+        raffle: {
+          cashbackPercent: parsed.data.cashbackPercent ?? Number(currentRaffle["cashbackPercent"] ?? 20),
+          cashbackToGoldPercent: parsed.data.cashbackToGoldPercent ?? Number(currentRaffle["cashbackToGoldPercent"] ?? 30),
+          goldSotBack: parsed.data.goldSotBack ?? Number(currentRaffle["goldSotBack"] ?? 0),
+          tomanPerGoldSot: parsed.data.tomanPerGoldSot ?? Number(currentRaffle["tomanPerGoldSot"] ?? 100_000),
+          mainPrizeTitle: parsed.data.mainPrizeTitle ?? String(currentRaffle["mainPrizeTitle"] ?? "جایزه اصلی خودرو"),
+          mainPrizeValueIrr: parsed.data.mainPrizeValueIrr ?? Number(currentRaffle["mainPrizeValueIrr"] ?? 0),
+        },
+      }
+    }
+
     if (parsed.data.status !== undefined) vehicle.status = parsed.data.status
     if (parsed.data.listedPriceIrr !== undefined) vehicle.listedPriceIrr = parsed.data.listedPriceIrr
     if (parsed.data.listedPriceGoldSot !== undefined) vehicle.listedPriceGoldSot = parsed.data.listedPriceGoldSot
     if (parsed.data.acquisitionCostIrr !== undefined) vehicle.acquisitionCostIrr = parsed.data.acquisitionCostIrr
     vehicle.updatedAt = nowIso()
     store.showroomVehicles.set(vehicle.id, vehicle)
+
+    const normalized = normalizeShowroomVehicle(vehicle)
     pushLiveEvent(store, {
       type: "showroom.vehicle",
       level: "warning",
-      message: `وضعیت/قیمت خودرو به‌روزرسانی شد`,
-      data: { vehicleId: vehicle.id, title: vehicle.vehicle.title, status: vehicle.status },
+      message: "وضعیت/قیمت خودرو به‌روزرسانی شد",
+      data: { vehicleId: vehicle.id, title: normalized.vehicle.title, status: vehicle.status },
     })
-    return { vehicle }
+    return { vehicle: normalized }
   })
 
   app.get("/admin/showroom/orders", { preHandler: [app.adminOnly] }, async () => ({
@@ -557,7 +1423,8 @@ export async function registerEnterpriseRoutes(ctx: RouteContext): Promise<void>
       .map((o) => {
         const buyer = store.users.get(o.buyerUserId)
         const vehicle = store.showroomVehicles.get(o.vehicleId)
-        return { ...o, buyerEmail: buyer?.email ?? "unknown", vehicleTitle: String(vehicle?.vehicle?.["title"] ?? o.vehicleId) }
+        const normalizedVehicle = vehicle ? normalizeShowroomVehicle(vehicle) : null
+        return { ...o, buyerEmail: buyer?.email ?? "unknown", vehicleTitle: normalizedVehicle?.vehicle.title ?? o.vehicleId }
       }),
   }))
 
@@ -568,6 +1435,17 @@ export async function registerEnterpriseRoutes(ctx: RouteContext): Promise<void>
     const order = store.showroomOrders.get(params.orderId)
     if (!order) return reply.code(404).send({ error: "ORDER_NOT_FOUND" })
     order.status = parsed.data.status
+    if ((parsed.data.status === "paid" || parsed.data.status === "completed") && !(order.slideEntryNumbers?.length)) {
+      const slideTickets = attachShowroomOrderToActiveSlideDraw(store, {
+        orderId: order.id,
+        vehicleId: order.vehicleId,
+        userId: order.buyerUserId,
+        ticketCount: 1,
+        at: nowIso(),
+      })
+      order.slideDrawId = slideTickets.drawId
+      order.slideEntryNumbers = slideTickets.entryNumbers
+    }
     order.updatedAt = nowIso()
     store.showroomOrders.set(order.id, order)
     pushLiveEvent(store, {
@@ -591,6 +1469,64 @@ export async function registerEnterpriseRoutes(ctx: RouteContext): Promise<void>
     const amount = parsed.data.paymentAsset === "GOLD_SOT" ? vehicle.listedPriceGoldSot : vehicle.listedPriceIrr
     if (!amount || amount <= 0) return reply.code(400).send({ error: "PRICE_NOT_AVAILABLE" })
 
+    if (parsed.data.paymentAsset === "CARD_TO_CARD") {
+      if (!parsed.data.fromCardLast4 || !parsed.data.trackingCode || !parsed.data.receiptImageUrl) {
+        return reply.code(400).send({ error: "CARD_TO_CARD_RECEIPT_REQUIRED" })
+      }
+      const cashPrice = vehicle.listedPriceIrr
+      if (!cashPrice || cashPrice <= 0) return reply.code(400).send({ error: "CARD_TO_CARD_REQUIRES_IRR_PRICE" })
+
+      const order = {
+        id: id("ord"),
+        vehicleId: vehicle.id,
+        buyerUserId: user.id,
+        paymentAsset: "CARD_TO_CARD" as const,
+        paymentAmount: cashPrice,
+        status: "pending" as const,
+        createdAt: nowIso(),
+        updatedAt: nowIso(),
+      }
+      store.showroomOrders.set(order.id, order)
+
+      vehicle.status = "reserved"
+      vehicle.updatedAt = nowIso()
+      store.showroomVehicles.set(vehicle.id, vehicle)
+
+      const payment = createCardToCardPayment(store, {
+        userId: user.id,
+        userEmail: user.email,
+        amount: cashPrice,
+        purpose: "showroom_order",
+        fromCardLast4: parsed.data.fromCardLast4,
+        trackingCode: parsed.data.trackingCode,
+        receiptImageUrl: parsed.data.receiptImageUrl,
+        metadata: {
+          orderId: order.id,
+          vehicleId: vehicle.id,
+        },
+      })
+
+      pushLiveEvent(store, {
+        type: "showroom.order",
+        level: "info",
+        message: "درخواست خرید خودرو با کارت به کارت ثبت شد",
+        data: { orderId: order.id, vehicleId: order.vehicleId, buyerUserId: order.buyerUserId, status: order.status },
+      })
+      pushUserNotification(store, {
+        userId: user.id,
+        title: "درخواست خرید خودرو ثبت شد",
+        body: "رسید کارت به کارت ثبت شد و سفارش پس از تایید ادمین نهایی می‌شود.",
+        kind: "info",
+      })
+
+      return {
+        order,
+        paymentId: payment.id,
+        paymentStatus: payment.status,
+        destinationCard: getCardToCardDestinationCard(store),
+      }
+    }
+
     if (parsed.data.paymentAsset === "IRR") {
       if (user.walletBalance < amount) return reply.code(400).send({ error: "INSUFFICIENT_BALANCE" })
       user.walletBalance -= amount
@@ -598,8 +1534,14 @@ export async function registerEnterpriseRoutes(ctx: RouteContext): Promise<void>
       if ((user.goldSotBalance ?? 0) < amount) return reply.code(400).send({ error: "INSUFFICIENT_GOLD" })
       user.goldSotBalance = (user.goldSotBalance ?? 0) - amount
     } else {
+      const loanConfig = normalizeLoanConfig(store.loanConfig)
+      store.loanConfig = loanConfig
+      if (!loanConfig.enabled) return reply.code(403).send({ error: "LOAN_DISABLED" })
+
       const vip = recalcVip(user)
-      if (vip.id < 3) return reply.code(403).send({ error: "PRO_ONLY", requiredLevel: 3 })
+      if (vip.id < loanConfig.requiredVipLevelId) {
+        return reply.code(403).send({ error: "PRO_ONLY", requiredLevel: loanConfig.requiredVipLevelId })
+      }
       const cashPrice = vehicle.listedPriceIrr
       if (!cashPrice || cashPrice <= 0) return reply.code(400).send({ error: "LOAN_REQUIRES_IRR_PRICE" })
       const minDownPayment = Math.round(cashPrice * 0.2)
@@ -608,7 +1550,8 @@ export async function registerEnterpriseRoutes(ctx: RouteContext): Promise<void>
       user.walletBalance -= downPayment
       const loanPrincipal = Math.max(0, cashPrice - downPayment)
       if (loanPrincipal > 0) {
-        const plan = buildInstallmentPlan(loanPrincipal, parsed.data.loanMonths ?? 12)
+        const requestedInstallments = resolveInstallments(loanConfig, parsed.data.loanMonths)
+        const plan = buildLoanPlan(loanConfig, loanPrincipal, requestedInstallments)
         const now = nowIso()
         const loan = {
           id: id("loan"),
@@ -625,8 +1568,15 @@ export async function registerEnterpriseRoutes(ctx: RouteContext): Promise<void>
           restrictedUsage: false,
           createdAt: now,
           updatedAt: now,
-          dueAt: new Date(Date.now() + plan.installmentCount * 30 * 24 * 60 * 60 * 1000).toISOString(),
+          dueAt: plusMonthsIso(now, plan.installmentCount),
+          installments: buildLoanInstallments({
+            principalIrr: loanPrincipal,
+            totalRepayableIrr: plan.totalRepayableIrr,
+            installmentCount: plan.installmentCount,
+            baseDateIso: now,
+          }),
         }
+        normalizeLoan(loan, now)
         store.autoLoans.set(loan.id, loan)
       }
     }
@@ -637,14 +1587,24 @@ export async function registerEnterpriseRoutes(ctx: RouteContext): Promise<void>
     vehicle.updatedAt = nowIso()
     store.showroomVehicles.set(vehicle.id, vehicle)
     const cashPrice = vehicle.listedPriceIrr ?? amount
+    const loanConfig = normalizeLoanConfig(store.loanConfig)
+    store.loanConfig = loanConfig
     const downPaymentIrr = parsed.data.paymentAsset === "LOAN" ? Math.max(Math.round(cashPrice * 0.2), parsed.data.downPaymentIrr ?? Math.round(cashPrice * 0.2)) : undefined
-    const loanMonths = parsed.data.paymentAsset === "LOAN" ? Math.max(6, Math.min(60, parsed.data.loanMonths ?? 12)) : undefined
+    const loanMonths = parsed.data.paymentAsset === "LOAN" ? resolveInstallments(loanConfig, parsed.data.loanMonths) : undefined
     const loanAmountIrr = parsed.data.paymentAsset === "LOAN" ? Math.max(0, cashPrice - (downPaymentIrr ?? 0)) : undefined
     const monthlyInstallmentIrr = parsed.data.paymentAsset === "LOAN" && loanAmountIrr
-      ? buildInstallmentPlan(loanAmountIrr, loanMonths ?? 12).monthlyInstallmentIrr
+      ? buildLoanPlan(loanConfig, loanAmountIrr, loanMonths ?? loanConfig.defaultInstallments).monthlyInstallmentIrr
       : undefined
+    const orderId = id("ord")
+    const slideTickets = attachShowroomOrderToActiveSlideDraw(store, {
+      orderId,
+      vehicleId: vehicle.id,
+      userId: user.id,
+      ticketCount: 1,
+      at: nowIso(),
+    })
     const order = {
-      id: id("ord"),
+      id: orderId,
       vehicleId: vehicle.id,
       buyerUserId: user.id,
       paymentAsset: parsed.data.paymentAsset,
@@ -653,6 +1613,8 @@ export async function registerEnterpriseRoutes(ctx: RouteContext): Promise<void>
       downPaymentIrr,
       loanAmountIrr,
       monthlyInstallmentIrr,
+      slideDrawId: slideTickets.drawId,
+      slideEntryNumbers: slideTickets.entryNumbers,
       status: "paid" as const,
       createdAt: nowIso(),
       updatedAt: nowIso(),
@@ -664,7 +1626,11 @@ export async function registerEnterpriseRoutes(ctx: RouteContext): Promise<void>
       message: `سفارش جدید خودرو ثبت شد`,
       data: { orderId: order.id, vehicleId: order.vehicleId, buyerUserId: order.buyerUserId, status: order.status },
     })
-    return { order, balances: { walletBalance: user.walletBalance, goldSotBalance: user.goldSotBalance ?? 0 } }
+    return {
+      order,
+      slideDraw: { drawId: slideTickets.drawId, ticketNumbers: slideTickets.entryNumbers },
+      balances: { walletBalance: user.walletBalance, goldSotBalance: user.goldSotBalance ?? 0 },
+    }
   })
 
   app.get("/auctions/live", async () => {

@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react"
 import { Calculator, Plus, Save, Send, Trash2 } from "lucide-react"
 import toast from "react-hot-toast"
 import { apiRequest } from "@/lib/api"
+import { formatMoneyInput, formatToman, parseBoundedIntInput, parseTomanInput } from "@/lib/money"
 
 type PriceTier = {
   id: number
@@ -130,8 +131,20 @@ export default function AdminPricingPage() {
             {tiers.map((tier) => (
               <div key={tier.id} className="grid grid-cols-[90px,1fr,140px,40px] gap-3 items-center bg-dark-bg/50 border border-dark-border/30 rounded-xl p-3">
                 <span className="text-sm font-bold">بلیط {tier.order.toLocaleString("fa-IR")}</span>
-                <input type="number" value={tier.price} onChange={(e) => updateTier(tier.id, "price", Number(e.target.value))} className="bg-dark-surface/70 border border-dark-border/40 rounded-lg px-3 py-2" />
-                <input type="number" value={tier.discount} onChange={(e) => updateTier(tier.id, "discount", Number(e.target.value))} className="bg-dark-surface/70 border border-dark-border/40 rounded-lg px-3 py-2" />
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  value={formatMoneyInput(String(tier.price))}
+                  onChange={(e) => updateTier(tier.id, "price", parseTomanInput(e.target.value) ?? 0)}
+                  className="bg-dark-surface/70 border border-dark-border/40 rounded-lg px-3 py-2"
+                />
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  value={formatMoneyInput(String(tier.discount))}
+                  onChange={(e) => updateTier(tier.id, "discount", parseBoundedIntInput(e.target.value, { min: 0, max: 100 }) ?? 0)}
+                  className="bg-dark-surface/70 border border-dark-border/40 rounded-lg px-3 py-2"
+                />
                 <button type="button" onClick={() => removeTier(tier.id)} className="w-9 h-9 rounded-lg border border-white/10 bg-white/5 inline-flex items-center justify-center hover:bg-status-danger/10 hover:border-status-danger/30 transition-colors">
                   <Trash2 size={16} className="text-status-danger" />
                 </button>
@@ -149,19 +162,19 @@ export default function AdminPricingPage() {
           <div className="grid grid-cols-2 gap-3">
             <div className="bg-dark-bg/50 border border-dark-border/30 rounded-xl p-3">
               <label className="text-xs text-dark-text/60">درصد کش بک</label>
-              <input type="number" value={cashbackPercent} onChange={(e) => setCashbackPercent(Number(e.target.value))} className="w-full mt-2 bg-dark-surface/70 border border-dark-border/40 rounded-lg px-3 py-2" />
+              <input type="text" inputMode="numeric" value={formatMoneyInput(String(cashbackPercent))} onChange={(e) => setCashbackPercent(parseBoundedIntInput(e.target.value, { min: 0, max: 100 }) ?? 0)} className="w-full mt-2 bg-dark-surface/70 border border-dark-border/40 rounded-lg px-3 py-2" />
             </div>
             <div className="bg-dark-bg/50 border border-dark-border/30 rounded-xl p-3">
               <label className="text-xs text-dark-text/60">شانس قرعه کشی/بلیط</label>
-              <input type="number" value={drawChancePerTicket} onChange={(e) => setDrawChancePerTicket(Number(e.target.value))} className="w-full mt-2 bg-dark-surface/70 border border-dark-border/40 rounded-lg px-3 py-2" />
+              <input type="text" inputMode="numeric" value={formatMoneyInput(String(drawChancePerTicket))} onChange={(e) => setDrawChancePerTicket(parseBoundedIntInput(e.target.value, { min: 0 }) ?? 0)} className="w-full mt-2 bg-dark-surface/70 border border-dark-border/40 rounded-lg px-3 py-2" />
             </div>
             <div className="bg-dark-bg/50 border border-dark-border/30 rounded-xl p-3">
               <label className="text-xs text-dark-text/60">شانس گردونه/بلیط</label>
-              <input type="number" value={wheelChancePerTicket} onChange={(e) => setWheelChancePerTicket(Number(e.target.value))} className="w-full mt-2 bg-dark-surface/70 border border-dark-border/40 rounded-lg px-3 py-2" />
+              <input type="text" inputMode="numeric" value={formatMoneyInput(String(wheelChancePerTicket))} onChange={(e) => setWheelChancePerTicket(parseBoundedIntInput(e.target.value, { min: 0 }) ?? 0)} className="w-full mt-2 bg-dark-surface/70 border border-dark-border/40 rounded-lg px-3 py-2" />
             </div>
             <div className="bg-dark-bg/50 border border-dark-border/30 rounded-xl p-3">
               <label className="text-xs text-dark-text/60">هر چند بلیط = ۱ رایگان</label>
-              <input type="number" value={freeTicketPerN} onChange={(e) => setFreeTicketPerN(Number(e.target.value))} className="w-full mt-2 bg-dark-surface/70 border border-dark-border/40 rounded-lg px-3 py-2" />
+              <input type="text" inputMode="numeric" value={formatMoneyInput(String(freeTicketPerN))} onChange={(e) => setFreeTicketPerN(parseBoundedIntInput(e.target.value, { min: 1 }) ?? 1)} className="w-full mt-2 bg-dark-surface/70 border border-dark-border/40 rounded-lg px-3 py-2" />
             </div>
           </div>
         </div>
@@ -181,8 +194,8 @@ export default function AdminPricingPage() {
           </select>
         </div>
         <div className="grid md:grid-cols-2 xl:grid-cols-4 gap-3">
-          <div className="bg-white/5 border border-white/10 rounded-xl p-4"><p className="text-sm text-dark-text/70">جمع پرداختی</p><p className="font-black text-accent-gold">{total.toLocaleString("fa-IR")} تومان</p></div>
-          <div className="bg-white/5 border border-white/10 rounded-xl p-4"><p className="text-sm text-dark-text/70">کش بک</p><p className="font-black text-accent-cyan">{cashback.toLocaleString("fa-IR")} تومان</p></div>
+          <div className="bg-white/5 border border-white/10 rounded-xl p-4"><p className="text-sm text-dark-text/70">جمع پرداختی</p><p className="font-black text-accent-gold">{formatToman(total)} تومان</p></div>
+          <div className="bg-white/5 border border-white/10 rounded-xl p-4"><p className="text-sm text-dark-text/70">کش بک</p><p className="font-black text-accent-cyan">{formatToman(cashback)} تومان</p></div>
           <div className="bg-white/5 border border-white/10 rounded-xl p-4"><p className="text-sm text-dark-text/70">شانس گردونه</p><p className="font-black">{(previewCount * wheelChancePerTicket).toLocaleString("fa-IR")}</p></div>
           <div className="bg-white/5 border border-white/10 rounded-xl p-4"><p className="text-sm text-dark-text/70">شانس قرعه کشی</p><p className="font-black">{(previewCount * drawChancePerTicket).toLocaleString("fa-IR")}</p></div>
         </div>

@@ -22,6 +22,10 @@ import {
   LogOut,
   MessageSquare,
   Car,
+  Globe,
+  BookOpen,
+  SlidersHorizontal,
+  Landmark,
 } from "lucide-react"
 import { useAuth } from "@/lib/auth-context"
 import toast from "react-hot-toast"
@@ -107,17 +111,21 @@ export default function AdminLayout({
   const adminMenu = [
     { label: "داشبورد", href: "/admin/dashboard", icon: LayoutDashboard },
     { label: "کاربران", href: "/admin/users", icon: Users },
-    { label: "مدیریت مالی و کیف پول", href: "/admin/finance", icon: CreditCard },
-    { label: "مدیریت قرعه کشی", href: "/admin/raffles", icon: Trophy },
-    { label: "تعرفه و قیمت گذاری", href: "/admin/pricing", icon: PieChart },
-    { label: "بازی ها و شانس", href: "/admin/wheel", icon: Gift },
-    { label: "مانیتورینگ لایو", href: "/admin/live", icon: Radio },
-    { label: "قوانین و محتوا", href: "/admin/content", icon: FileText },
+    { label: "مالی و درگاه پرداخت", href: "/admin/finance", icon: CreditCard },
+    { label: "مدیریت وام", href: "/admin/loans", icon: Landmark },
+    { label: "مدیریت قرعه‌کشی", href: "/admin/raffles", icon: Trophy },
+    { label: "تعرفه و قیمت‌گذاری", href: "/admin/pricing", icon: PieChart },
+    { label: "بازی‌ها و شانس", href: "/admin/wheel", icon: Gift },
+    { label: "مانیتورینگ و ریسک", href: "/admin/live", icon: Radio },
+    { label: "مدیریت وبلاگ", href: "/admin/blog", icon: BookOpen },
+    { label: "مدیریت سایت و محتوا", href: "/admin/settings", icon: SlidersHorizontal },
+    { label: "مدیریت SEO", href: "/admin/seo", icon: Globe },
     { label: "گزارش امنیت", href: "/admin/audit", icon: ShieldAlert },
     { label: "مدیریت مزایده", href: "/admin/rewards", icon: Gavel },
     { label: "مدیریت نمایشگاه", href: "/admin/showroom", icon: Car },
+    { label: "حواله خودرو", href: "/admin/checks", icon: FileText },
     { label: "تیکت پشتیبانی", href: "/admin/support", icon: MessageSquare },
-    { label: "قرعه کشی اسلاید", href: "/admin/slide", icon: TimerReset },
+    { label: "قرعه‌کشی اسلاید", href: "/admin/slide", icon: TimerReset },
   ]
 
   return (

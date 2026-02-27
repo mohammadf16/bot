@@ -22,6 +22,10 @@ export async function registerSecurity(app: FastifyInstance): Promise<void> {
   await app.register(helmet, {
     global: true,
     contentSecurityPolicy: false,
+    crossOriginEmbedderPolicy: false,
+    crossOriginResourcePolicy: {
+      policy: "cross-origin",
+    },
   })
 
   await app.register(cors, {

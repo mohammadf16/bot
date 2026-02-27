@@ -18,10 +18,10 @@ type Summary = {
 type LiveMetrics = {
   openRaffles: number
   closedRaffles: number
-  gameDifficulty?: number
   slide?: {
     upcoming?: { id: string; title: string; scheduledAt: string } | null
   }
+  slideSingleMode?: string
 }
 
 export default function AdminDashboard() {
@@ -96,8 +96,8 @@ export default function AdminDashboard() {
             <p className="font-black">{(live?.closedRaffles ?? 0).toLocaleString("fa-IR")}</p>
           </div>
           <div className="bg-white/5 border border-white/10 rounded-xl p-3">
-            <p className="text-white/50">سختی اسلاید</p>
-            <p className="font-black">{(live?.gameDifficulty ?? 0).toLocaleString("fa-IR")}</p>
+            <p className="text-white/50">حالت اسلاید</p>
+            <p className="font-black">{live?.slideSingleMode ?? "fully_random"}</p>
           </div>
           <div className="bg-white/5 border border-white/10 rounded-xl p-3">
             <p className="text-white/50">اسلاید بعدی</p>

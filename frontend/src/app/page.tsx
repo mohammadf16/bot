@@ -1,10 +1,11 @@
-﻿"use client"
+"use client"
 
 import { motion, AnimatePresence, useMotionTemplate } from "framer-motion"
 import { useEffect, useMemo, useRef, useState } from "react"
 import Link from "next/link"
 import { ArrowLeft, ChevronDown, Crown, Gift, Smartphone, Trophy, CircleDollarSign, CarFront } from "lucide-react"
 import { apiRequest } from "@/lib/api"
+import { formatToman } from "@/lib/money"
 
 const basePath = process.env.NEXT_PUBLIC_BASE_PATH ?? ""
 const withBasePath = (path: string) => `${basePath}${path}`
@@ -30,29 +31,28 @@ type ShowroomVehicle = {
   listedPriceGoldSot?: number
 }
 
-const DEFAULT_HERO_SLIDES = [
-  {
-    image: withBasePath("/photo/1.avif"),
-    title: "BMW M440i xDrive",
-    subtitle: "مدل 2024 | تهران | صفر کیلومتر",
-    href: "/cars/vehicle-1",
-  },
-  {
-    image: withBasePath("/photo/2.avif"),
-    title: "Mercedes-Benz C300",
-    subtitle: "مدل 2023 | اصفهان | کارکرد 22,000 کیلومتر",
-    href: "/cars/vehicle-2",
-  },
-  {
-    image: withBasePath("/photo/3.jpg"),
-    title: "Audi A4",
-    subtitle: "مدل 2022 | شیراز | کارکرد 41,000 کیلومتر",
-    href: "/cars/vehicle-3",
-  },
-]
+type HomeRaffle = {
+  id: string
+  title: string
+  status: "draft" | "open" | "closed" | "drawn"
+  maxTickets: number
+  ticketsSold: number
+  rewardConfig: {
+    mainPrizeTitle: string
+    mainPrizeValueIrr: number
+  }
+}
+
+const EMPTY_HERO_SLIDE = {
+  image: withBasePath("/photo/auto.png"),
+  title: "فعلا خودرویی ثبت نشده است",
+  subtitle: "برای نمایش در این بخش، خودرو را از پنل ادمین اضافه کنید.",
+  href: "/cars",
+}
 
 const MOBILE_QUICK_LINKS = [
   { label: "فروشگاه خودرو", href: "/cars" },
+  { label: "ورود / ثبت نام", href: "/register" },
   { label: "قرعه کشی ها", href: "/raffles" },
   { label: "گردونه شانس", href: "/wheel" },
   { label: "ماشین اسلاید", href: "/slide-game" },
@@ -60,6 +60,13 @@ const MOBILE_QUICK_LINKS = [
 ]
 
 const DEFAULT_MOBILE_CAR_SCENES = [
+  {
+    image: withBasePath("/photo/2.avif"),
+    title: "ثبت نام و شروع سریع",
+    subtitle: "اول ثبت نام کن تا حواله خودرو، سفارش خرید و پیگیری های بعدی داخل حساب خودت ذخیره شود.",
+    href: "/register",
+    cta: "ثبت نام",
+  },
   {
     image: withBasePath("/photo/auto.png"),
     title: "ویترین خودروهای روز",
@@ -96,6 +103,20 @@ type MobileCarScene = {
   subtitle: string
   href: string
   cta: string
+}
+
+type HomeContent = {
+  mobileExperienceTitle: string
+  mobileExperienceDescription: string
+  activeRafflesTitle: string
+  activeRafflesSubtitle: string
+}
+
+const DEFAULT_HOME_CONTENT: HomeContent = {
+  mobileExperienceTitle: "کل سایت را راحت تجربه کن",
+  mobileExperienceDescription: "مسیر خرید خودرو، قرعه کشی، بازی و کیف پول از همین صفحه برای موبایل قابل دسترسی است.",
+  activeRafflesTitle: "قرعه کشی های فعال",
+  activeRafflesSubtitle: "بلیط پلکانی، کش بک ۲۰٪، شانس گردونه و جوایز متنوع",
 }
 
 const GlobalStyles = ({ isMobile }: { isMobile: boolean }) => (
@@ -179,7 +200,7 @@ const SectionWrapper = ({ children, className = "", fullWidth = false }: { child
 
 const HeroSection = ({ onNext, slides }: { onNext: () => void; slides: HeroSlide[] }) => {
   const [activeSlide, setActiveSlide] = useState(0)
-  const safeSlides = slides.length > 0 ? slides : DEFAULT_HERO_SLIDES
+  const safeSlides = slides.length > 0 ? slides : [EMPTY_HERO_SLIDE]
 
   useEffect(() => {
     setActiveSlide(0)
@@ -297,38 +318,61 @@ const WheelPreviewSection = () => (
 const ServiceSection = () => (
   <SectionWrapper>
     <div className="grid lg:grid-cols-2 gap-10 items-center">
-      <div className="space-y-6 text-right">
+      <div className="space-y-8 text-right">
+        <div className="inline-flex items-center gap-2 bg-white/5 border border-white/10 rounded-full px-4 py-2">
+          <span className="w-1.5 h-1.5 rounded-full bg-accent-gold animate-pulse" />
+          <span className="text-xs text-white/60 font-bold uppercase tracking-widest">خدمات LUX</span>
+        </div>
         <h2 className="text-3xl md:text-5xl lg:text-6xl font-black">خدمات <span className="text-[#D4AF37]">خودرویی</span></h2>
-        <p className="text-white/70 text-[15px] md:text-lg leading-relaxed">فروش خودرو، مزایده، وام خودرو و خرید حواله در یک تجربه یکپارچه.</p>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <Link href="/cars"><GlassButton className="w-full">فروشگاه خودرو</GlassButton></Link>
-          <Link href="/auction"><GlassButton className="w-full">مزایده خودرو</GlassButton></Link>
-          <Link href="/loan"><GlassButton className="w-full">وام خودرو</GlassButton></Link>
-          <Link href="/checks"><GlassButton className="w-full">خرید حواله</GlassButton></Link>
+        <p className="text-white/70 text-[15px] md:text-lg leading-relaxed">فروش خودرو، مزایده، وام خودرو و خرید حواله — همه در یک تجربه یکپارچه و بدون دردسر.</p>
+        <div className="grid grid-cols-2 gap-3">
+          {[
+            { href: "/cars", label: "فروشگاه", desc: "خودروی روز", icon: "🚗" },
+            { href: "/auction", label: "مزایده", desc: "قیمت بهتر", icon: "🏆" },
+            { href: "/loan", label: "وام خودرو", desc: "اقساط آسان", icon: "💳" },
+            { href: "/checks", label: "حواله", desc: "خریدسریع", icon: "📋" },
+          ].map((item) => (
+            <Link key={item.href} href={item.href}>
+              <div className="group p-4 rounded-2xl bg-white/5 border border-white/10 hover:border-[#D4AF37]/40 hover:bg-[#D4AF37]/5 transition-all duration-300 cursor-pointer">
+                <div className="text-2xl mb-2">{item.icon}</div>
+                <p className="font-black text-sm group-hover:text-[#D4AF37] transition-colors">{item.label}</p>
+                <p className="text-xs text-white/40 mt-0.5">{item.desc}</p>
+              </div>
+            </Link>
+          ))}
         </div>
       </div>
       <div className="relative">
         <div className="absolute inset-0 bg-[#D4AF37]/10 blur-3xl" />
-        <img src="https://images.unsplash.com/photo-1503376780353-7e6692767b70?q=80&w=1400" alt="cars" className="rounded-3xl border border-white/10 w-full h-[260px] md:h-auto object-contain md:object-cover bg-black/30" />
+        <div className="relative rounded-3xl border border-white/10 overflow-hidden bg-black/30">
+          <img src="https://images.unsplash.com/photo-1503376780353-7e6692767b70?q=80&w=1400" alt="cars" className="w-full h-[260px] md:h-auto object-contain md:object-cover" />
+          <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
+          <div className="absolute bottom-0 inset-x-0 p-6 flex items-center justify-between">
+            <div>
+              <p className="text-xs text-white/50 mb-1">موجودی شوروم</p>
+              <p className="font-black text-lg">خودروهای صفر و کارکرده</p>
+            </div>
+            <Link href="/cars">
+              <div className="w-10 h-10 rounded-xl bg-[#D4AF37] flex items-center justify-center">
+                <ArrowLeft className="w-5 h-5 text-black" />
+              </div>
+            </Link>
+          </div>
+        </div>
       </div>
     </div>
   </SectionWrapper>
 )
 
-const ActiveRafflesSection = () => {
-  const items = [
-    { name: "Ferrari SF90", price: "۲,۵۰۰,۰۰۰ تومان", sold: 450, total: 1000, img: "https://images.unsplash.com/photo-1617788138017-80ad40651399?q=80&w=1000" },
-    { name: "Lamborghini Huracan", price: "۱,۸۵۰,۰۰۰ تومان", sold: 789, total: 1000, img: "https://images.unsplash.com/photo-1503376780353-7e6692767b70?q=80&w=1000" },
-    { name: "Porsche 911", price: "۱,۴۵۰,۰۰۰ تومان", sold: 234, total: 1000, img: "https://images.unsplash.com/photo-1603584173870-7f3ca99a9141?q=80&w=1000" },
-  ]
-
+const ActiveRafflesSection = ({ content, raffles }: { content: HomeContent; raffles: HomeRaffle[] }) => {
+  const items = raffles.slice(0, 3)
   return (
     <SectionWrapper>
       <div className="w-full flex flex-col justify-center h-full py-8 md:py-0">
         <div className="mb-6 md:mb-12 flex flex-col sm:flex-row gap-3 sm:gap-4 sm:justify-between sm:items-end border-b border-white/10 pb-4 md:pb-6 shrink-0">
           <div>
-            <h2 className="text-2xl md:text-4xl font-black mb-1 md:mb-2">قرعه کشی های <span className="text-[#D4AF37]">فعال</span></h2>
-            <p className="text-xs md:text-sm text-white/50">بلیط پلکانی، کش بک ۲۰٪، شانس گردونه و جوایز متنوع</p>
+            <h2 className="text-2xl md:text-4xl font-black mb-1 md:mb-2">{content.activeRafflesTitle}</h2>
+            <p className="text-xs md:text-sm text-white/50">{content.activeRafflesSubtitle}</p>
           </div>
           <Link href="/raffles"><GlassButton>مشاهده همه</GlassButton></Link>
         </div>
@@ -349,23 +393,27 @@ const ActiveRafflesSection = () => {
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6">
-          {items.map((item, i) => (
+          {items.length === 0 ? (
+            <div className="md:col-span-3 rounded-2xl border border-white/10 bg-white/5 p-6 text-center text-white/70">
+              قرعه کشی فعالی برای نمایش وجود ندارد.
+            </div>
+          ) : items.map((item, i) => (
             <motion.div key={i} initial={{ y: 50, opacity: 0 }} whileInView={{ y: 0, opacity: 1 }} transition={{ delay: i * 0.1 }} className="group relative bg-white/5 rounded-3xl overflow-hidden border border-white/10 hover:border-[#D4AF37]/50 transition-all duration-300">
               <div className="aspect-video relative overflow-hidden">
-                <img src={item.img} alt={item.name} className="w-full h-full object-contain md:object-cover bg-black/40 group-hover:scale-110 transition-transform duration-700" />
+                <img src="https://images.unsplash.com/photo-1552519507-da3b142c6e3d?q=80&w=1200" alt={item.title} className="w-full h-full object-contain md:object-cover bg-black/40 group-hover:scale-110 transition-transform duration-700" />
                 <div className="absolute inset-0 bg-gradient-to-t from-black/80 to-transparent" />
                 <div className="absolute bottom-4 right-4 left-4">
-                  <h3 className="font-black text-sm md:text-base mb-1 text-left" dir="ltr">{item.name}</h3>
-                  <p className="text-[#D4AF37] font-bold text-xs md:text-sm">{item.price}</p>
+                  <h3 className="font-black text-sm md:text-base mb-1 text-right">{item.title}</h3>
+                  <p className="text-[#D4AF37] font-bold text-xs md:text-sm">{item.rewardConfig.mainPrizeTitle}</p>
                 </div>
               </div>
               <div className="p-4 md:p-6">
                 <div className="flex items-center justify-between mb-3 md:mb-4">
                   <span className="text-xs md:text-sm text-white/60">بلیط فروخته شده</span>
-                  <span className="text-xs md:text-sm font-bold">{item.sold.toLocaleString()}/{item.total.toLocaleString()}</span>
+                  <span className="text-xs md:text-sm font-bold">{item.ticketsSold.toLocaleString()}/{item.maxTickets.toLocaleString()}</span>
                 </div>
                 <div className="w-full bg-white/10 rounded-full h-2 mb-4 md:mb-6">
-                  <div className="bg-gradient-to-r from-[#D4AF37] to-[#B8941F] h-2 rounded-full" style={{ width: `${(item.sold / item.total) * 100}%` }} />
+                  <div className="bg-gradient-to-r from-[#D4AF37] to-[#B8941F] h-2 rounded-full" style={{ width: `${item.maxTickets > 0 ? (item.ticketsSold / item.maxTickets) * 100 : 0}%` }} />
                 </div>
                 <GlassButton primary className="w-full text-xs md:text-sm">خرید بلیط</GlassButton>
               </div>
@@ -378,25 +426,41 @@ const ActiveRafflesSection = () => {
 }
 
 const FooterCTA = () => (
-  <SectionWrapper className="bg-black">
+  <SectionWrapper className="bg-black overflow-hidden">
+    {/* Background decorations */}
+    <div className="absolute inset-0 pointer-events-none">
+      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-[#D4AF37]/5 blur-[120px] rounded-full" />
+      <div className="absolute top-0 right-0 w-[300px] h-[300px] bg-accent-cyan/5 blur-[80px] rounded-full" />
+      <div className="absolute bottom-0 left-0 w-[300px] h-[300px] bg-purple-500/5 blur-[80px] rounded-full" />
+    </div>
+
     <div className="relative z-10 flex flex-col items-center justify-center text-center w-full h-full max-w-5xl mx-auto">
-      <motion.div initial={{ opacity: 0, scale: 0.9 }} whileInView={{ opacity: 1, scale: 1 }} className="mb-8 p-4 rounded-full bg-[#D4AF37]/10 border border-[#D4AF37]/20">
-        <Crown size={48} className="text-[#D4AF37]" />
+      <motion.div initial={{ opacity: 0, scale: 0.9 }} whileInView={{ opacity: 1, scale: 1 }} className="mb-6">
+        <div className="relative inline-block">
+          <div className="absolute inset-0 bg-[#D4AF37]/20 blur-2xl rounded-full" />
+          <div className="relative p-5 rounded-full bg-[#D4AF37]/10 border border-[#D4AF37]/20">
+            <Crown size={48} className="text-[#D4AF37]" />
+          </div>
+        </div>
       </motion.div>
-      <motion.h2 initial={{ y: 20, opacity: 0 }} whileInView={{ y: 0, opacity: 1 }} className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-black text-white mb-6 md:mb-8 tracking-tight">
-        عضویت در <span className="text-[#D4AF37]">کلاب</span>
+      <motion.h2 initial={{ y: 20, opacity: 0 }} whileInView={{ y: 0, opacity: 1 }} className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-black text-white mb-4 tracking-tight">
+        عضویت در <span className="text-[#D4AF37]">کلاب VIP</span>
       </motion.h2>
-      <p className="text-[15px] md:text-lg text-white/70 mb-8 md:mb-12 max-w-2xl leading-relaxed">دسترسی زودهنگام به قرعه کشی های VIP، مزایای ویژه، گزارش شفاف نتایج و مدیریت کامل حساب.</p>
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 w-full mb-12">
+      <motion.p initial={{ y: 10, opacity: 0 }} whileInView={{ y: 0, opacity: 1 }} transition={{ delay: 0.1 }} className="text-[15px] md:text-lg text-white/60 mb-10 max-w-2xl leading-relaxed">
+        دسترسی زودهنگام به قرعه‌کشی‌های ویژه، مزایای انحصاری، گزارش شفاف نتایج و پنل مدیریت حرفه‌ای
+      </motion.p>
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 w-full mb-10">
         {[
-          { icon: Gift, title: "هدایای ویژه", desc: "جوایز نقدی و کش بک" },
-          { icon: Crown, title: "سطح VIP", desc: "امتیاز بیشتر در قرعه کشی" },
-          { icon: Smartphone, title: "پنل حرفه ای", desc: "مدیریت ساده کیف پول و بازی" },
+          { icon: Gift, title: "هدایای ویژه", desc: "جوایز نقدی و کش‌بک اختصاصی", color: "text-accent-gold" },
+          { icon: Crown, title: "سطح VIP", desc: "امتیاز بیشتر در قرعه‌کشی‌ها", color: "text-accent-gold" },
+          { icon: Smartphone, title: "پنل حرفه‌ای", desc: "مدیریت ساده کیف پول و بازی", color: "text-accent-cyan" },
         ].map((feature, i) => (
-          <motion.div key={i} initial={{ y: 20, opacity: 0 }} whileInView={{ y: 0, opacity: 1 }} transition={{ delay: i * 0.1 }} className="p-6 rounded-3xl bg-white/5 border border-white/10 hover:border-[#D4AF37]/30 transition-all group">
-            <feature.icon className="text-[#D4AF37] mx-auto mb-4 group-hover:scale-110 transition-transform" size={32} />
-            <h4 className="font-bold text-base text-white mb-2">{feature.title}</h4>
-            <p className="text-sm text-white/55">{feature.desc}</p>
+          <motion.div key={i} initial={{ y: 20, opacity: 0 }} whileInView={{ y: 0, opacity: 1 }} transition={{ delay: i * 0.08 }} className="p-6 rounded-2xl bg-white/3 border border-white/8 hover:border-[#D4AF37]/30 hover:bg-[#D4AF37]/3 transition-all duration-300 group backdrop-blur-sm">
+            <div className={`w-10 h-10 rounded-xl bg-white/5 flex items-center justify-center mx-auto mb-4 group-hover:scale-110 transition-transform`}>
+              <feature.icon className={`${feature.color} w-5 h-5`} />
+            </div>
+            <h4 className="font-black text-base text-white mb-1.5">{feature.title}</h4>
+            <p className="text-sm text-white/45 leading-6">{feature.desc}</p>
           </motion.div>
         ))}
       </div>
@@ -408,9 +472,9 @@ const FooterCTA = () => (
   </SectionWrapper>
 )
 
-const MobileHomeExperience = ({ slides, scenes }: { slides: HeroSlide[]; scenes: MobileCarScene[] }) => {
+const MobileHomeExperience = ({ slides, scenes, content }: { slides: HeroSlide[]; scenes: MobileCarScene[]; content: HomeContent }) => {
   const [activeSlide, setActiveSlide] = useState(0)
-  const safeSlides = slides.length > 0 ? slides : DEFAULT_HERO_SLIDES
+  const safeSlides = slides.length > 0 ? slides : [EMPTY_HERO_SLIDE]
   const safeScenes = scenes.length > 0 ? scenes : DEFAULT_MOBILE_CAR_SCENES
 
   useEffect(() => {
@@ -440,7 +504,7 @@ const MobileHomeExperience = ({ slides, scenes }: { slides: HeroSlide[]; scenes:
         <div className="absolute inset-0 bg-gradient-to-t from-black via-black/65 to-black/25" />
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_75%_15%,rgba(212,175,55,0.18),transparent_42%)]" />
 
-        <div className="relative z-20 min-h-[100svh] px-4 pt-28 pb-10 flex flex-col justify-end">
+        <div className="relative z-20 min-h-[100svh] px-4 pt-28 pb-[calc(env(safe-area-inset-bottom)+5rem)] flex flex-col justify-end">
           <span className="inline-flex w-fit items-center gap-2 rounded-full border border-[#D4AF37]/40 bg-black/40 px-3 py-1 text-[11px] font-bold text-[#D4AF37]">
             تجربه خودرو محور
           </span>
@@ -485,7 +549,30 @@ const MobileHomeExperience = ({ slides, scenes }: { slides: HeroSlide[]; scenes:
         </div>
       </section>
 
-      <section className="px-4 py-8 space-y-5">
+      <section className="px-4 py-8 pb-24 space-y-5">
+        <div className="relative min-h-[38svh] overflow-hidden rounded-[28px] border border-white/15">
+          <img
+            src="https://images.unsplash.com/photo-1542282088-fe8426682b8f?q=80&w=1600"
+            alt="car night drive"
+            className="absolute inset-0 h-full w-full object-cover"
+          />
+          <div className="absolute inset-0 bg-gradient-to-t from-black via-black/60 to-black/25" />
+          <div className="relative z-10 flex min-h-[38svh] flex-col justify-end p-6">
+            <h3 className="text-[28px] leading-[1.2] font-black text-white">{content.mobileExperienceTitle}</h3>
+            <p className="mt-2 text-[15px] leading-7 text-white/85">
+              {content.mobileExperienceDescription}
+            </p>
+            <div className="mt-5 grid grid-cols-2 gap-3">
+              <Link href="/register">
+                <GlassButton primary className="w-full">ثبت نام</GlassButton>
+              </Link>
+              <Link href="/login">
+                <GlassButton className="w-full">ورود</GlassButton>
+              </Link>
+            </div>
+          </div>
+        </div>
+
         {safeScenes.map((scene, index) => (
           <motion.article
             key={scene.href}
@@ -510,30 +597,6 @@ const MobileHomeExperience = ({ slides, scenes }: { slides: HeroSlide[]; scenes:
         ))}
       </section>
 
-      <section className="px-4 pb-16">
-        <div className="relative min-h-[38svh] overflow-hidden rounded-[28px] border border-white/15">
-          <img
-            src="https://images.unsplash.com/photo-1542282088-fe8426682b8f?q=80&w=1600"
-            alt="car night drive"
-            className="absolute inset-0 h-full w-full object-cover"
-          />
-          <div className="absolute inset-0 bg-gradient-to-t from-black via-black/60 to-black/25" />
-          <div className="relative z-10 flex min-h-[38svh] flex-col justify-end p-6">
-            <h3 className="text-[28px] leading-[1.2] font-black text-white">کل سایت را ساده و سریع تجربه کن</h3>
-            <p className="mt-2 text-[15px] leading-7 text-white/85">
-              مسیر خرید خودرو، قرعه کشی، بازی و کیف پول از همین صفحه برای موبایل قابل دسترسی است.
-            </p>
-            <div className="mt-5 grid grid-cols-2 gap-3">
-              <Link href="/login">
-                <GlassButton className="w-full">ورود / ثبت نام</GlassButton>
-              </Link>
-              <Link href="/fairness">
-                <GlassButton primary className="w-full">شفافیت سیستم</GlassButton>
-              </Link>
-            </div>
-          </div>
-        </div>
-      </section>
     </div>
   )
 }
@@ -543,6 +606,8 @@ export default function HomePage() {
   const [mousePos, setMousePos] = useState({ x: 0, y: 0 })
   const [isMobile, setIsMobile] = useState(false)
   const [showroomVehicles, setShowroomVehicles] = useState<ShowroomVehicle[]>([])
+  const [homeRaffles, setHomeRaffles] = useState<HomeRaffle[]>([])
+  const [homeContent, setHomeContent] = useState<HomeContent>(DEFAULT_HOME_CONTENT)
   const scrollTimeout = useRef<NodeJS.Timeout | null>(null)
   const sectionsCount = 5
 
@@ -551,10 +616,16 @@ export default function HomePage() {
 
     async function loadHomeData() {
       try {
-        const vehiclesData = await apiRequest<{ items: ShowroomVehicle[] }>("/showroom/vehicles", { method: "GET" }, { auth: false })
+        const [vehiclesData, contentData, rafflesData] = await Promise.all([
+          apiRequest<{ items: ShowroomVehicle[] }>("/showroom/vehicles", { method: "GET" }, { auth: false }),
+          apiRequest<{ content: HomeContent }>("/content/home", { method: "GET" }, { auth: false }),
+          apiRequest<{ items: HomeRaffle[] }>("/raffles", { method: "GET" }, { auth: false }),
+        ])
 
         if (!isMounted) return
         setShowroomVehicles(vehiclesData.items ?? [])
+        if (contentData.content) setHomeContent(contentData.content)
+        setHomeRaffles(rafflesData.items ?? [])
       } catch (error) {
         console.error("Failed to load home data", error)
       }
@@ -568,11 +639,9 @@ export default function HomePage() {
   }, [])
 
   const heroSlides = useMemo<HeroSlide[]>(() => {
-    if (showroomVehicles.length === 0) return DEFAULT_HERO_SLIDES
-
     return showroomVehicles.slice(0, 5).map((item) => {
       const mileage = item.vehicle.isNew ? "صفر کیلومتر" : `${item.vehicle.mileageKm.toLocaleString("fa-IR")} کیلومتر`
-      const price = item.listedPriceIrr ? `${item.listedPriceIrr.toLocaleString("fa-IR")} تومان` : "قیمت تماس"
+      const price = item.listedPriceIrr ? `${formatToman(item.listedPriceIrr)} تومان` : "قیمت تماس"
       return {
         image: item.vehicle.imageUrl || withBasePath("/photo/auto.png"),
         title: item.vehicle.title,
@@ -582,7 +651,19 @@ export default function HomePage() {
     })
   }, [showroomVehicles])
 
-  const mobileScenes = DEFAULT_MOBILE_CAR_SCENES
+  const mobileScenes = useMemo<MobileCarScene[]>(() => {
+    const dynamicScenes = showroomVehicles.slice(0, 3).map((item) => ({
+      image: item.vehicle.imageUrl || withBasePath("/photo/auto.png"),
+      title: item.vehicle.title,
+      subtitle: `${item.vehicle.model} | ${item.vehicle.city} | سال ${item.vehicle.year.toLocaleString("fa-IR")}`,
+      href: `/cars/${item.id}`,
+      cta: "مشاهده خودرو",
+    }))
+
+    return dynamicScenes.length > 0
+      ? [DEFAULT_MOBILE_CAR_SCENES[0], ...dynamicScenes]
+      : DEFAULT_MOBILE_CAR_SCENES
+  }, [showroomVehicles])
 
   useEffect(() => {
     const media = window.matchMedia("(max-width: 1023px)")
@@ -623,16 +704,16 @@ export default function HomePage() {
   return (
     <div dir="rtl" className={`bg-black w-full text-white ${isMobile ? "min-h-screen overflow-x-hidden" : "h-screen overflow-hidden"}`}>
       <GlobalStyles isMobile={isMobile} />
-      <AmbientLight mouseX={mousePos.x} mouseY={mousePos.y} />
+      {!isMobile ? <AmbientLight mouseX={mousePos.x} mouseY={mousePos.y} /> : null}
 
       {isMobile ? (
-        <MobileHomeExperience slides={heroSlides} scenes={mobileScenes} />
+        <MobileHomeExperience slides={heroSlides} scenes={mobileScenes} content={homeContent} />
       ) : (
         <motion.div className="w-full h-full" animate={{ y: `-${activeSection * 100}%` }} transition={{ duration: 0.8, ease: [0.6, 0.05, -0.01, 0.9] }}>
           <div className="h-full w-full"><HeroSection onNext={() => setActiveSection(1)} slides={heroSlides} /></div>
           <div className="h-full w-full"><WheelPreviewSection /></div>
           <div className="h-full w-full"><ServiceSection /></div>
-          <div className="h-full w-full"><ActiveRafflesSection /></div>
+          <div className="h-full w-full"><ActiveRafflesSection content={homeContent} raffles={homeRaffles} /></div>
           <div className="h-full w-full"><FooterCTA /></div>
         </motion.div>
       )}

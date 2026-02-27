@@ -3,6 +3,7 @@
 import { motion } from "framer-motion"
 import { Search, Filter, TrendingUp, TrendingDown, DollarSign, CreditCard, Wallet, ArrowUpRight, ArrowDownRight, Ticket, Eye, MoreVertical, Clock } from "lucide-react"
 import { useState } from "react"
+import { formatToman } from "@/lib/money"
 
 export default function AdminFinancialPage() {
   const [searchTerm, setSearchTerm] = useState("")
@@ -221,28 +222,28 @@ export default function AdminFinancialPage() {
             <div className="bg-white/5 border border-white/5 rounded-2xl p-6">
               <div className="flex items-center justify-between mb-2">
                 <TrendingUp className="w-6 h-6 text-emerald-500" />
-                <span className="text-2xl font-black">{totalIncome.toLocaleString()}</span>
+                <span className="text-2xl font-black">{formatToman(totalIncome)}</span>
               </div>
               <p className="text-white/40 text-xs">کل درآمد</p>
             </div>
             <div className="bg-white/5 border border-white/5 rounded-2xl p-6">
               <div className="flex items-center justify-between mb-2">
                 <TrendingDown className="w-6 h-6 text-rose-500" />
-                <span className="text-2xl font-black">{totalExpenses.toLocaleString()}</span>
+                <span className="text-2xl font-black">{formatToman(totalExpenses)}</span>
               </div>
               <p className="text-white/40 text-xs">کل هزینه‌ها</p>
             </div>
             <div className="bg-white/5 border border-white/5 rounded-2xl p-6">
               <div className="flex items-center justify-between mb-2">
                 <DollarSign className="w-6 h-6 text-accent-gold" />
-                <span className="text-2xl font-black">{netProfit.toLocaleString()}</span>
+                <span className="text-2xl font-black">{formatToman(netProfit)}</span>
               </div>
               <p className="text-white/40 text-xs">سود خالص</p>
             </div>
             <div className="bg-white/5 border border-white/5 rounded-2xl p-6">
               <div className="flex items-center justify-between mb-2">
                 <Clock className="w-6 h-6 text-amber-500" />
-                <span className="text-2xl font-black">{pendingAmount.toLocaleString()}</span>
+                <span className="text-2xl font-black">{formatToman(pendingAmount)}</span>
               </div>
               <p className="text-white/40 text-xs">در انتظار</p>
             </div>
@@ -332,7 +333,7 @@ export default function AdminFinancialPage() {
                     <td className="p-6">
                       <div className={`text-right ${transaction.amount > 0 ? 'text-emerald-500' : 'text-rose-500'}`}>
                         <p className="font-black text-lg">
-                          {transaction.amount > 0 ? '+' : ''}{transaction.amount.toLocaleString()}
+                          {transaction.amount > 0 ? '+' : ''}{formatToman(transaction.amount)}
                         </p>
                         <p className="text-xs text-white/40">تومان</p>
                       </div>

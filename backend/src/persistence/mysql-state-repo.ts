@@ -16,17 +16,22 @@ export class MysqlStateRepo {
   }
 
   async init(logger: FastifyBaseLogger): Promise<void> {
-    const bootstrapConnection = await mysql.createConnection({
-      host: env.MYSQL_HOST,
-      port: env.MYSQL_PORT,
-      user: env.MYSQL_USER,
-      password: env.MYSQL_PASSWORD,
-      multipleStatements: true,
-    })
-    await bootstrapConnection.query(
-      `CREATE DATABASE IF NOT EXISTS \`${env.MYSQL_DATABASE}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci`
-    )
-    await bootstrapConnection.end()
+    if (env.MYSQL_AUTO_CREATE_DATABASE) {
+      const bootstrapConnection = await mysql.createConnection({
+        host: env.MYSQL_HOST,
+        port: env.MYSQL_PORT,
+        user: env.MYSQL_USER,
+        password: env.MYSQL_PASSWORD,
+        multipleStatements: true,
+        charset: "utf8mb4",
+      })
+      await bootstrapConnection.query(
+        `CREATE DATABASE IF NOT EXISTS \`${env.MYSQL_DATABASE}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci`
+      )
+      await bootstrapConnection.end()
+    } else {
+      logger.info("MYSQL_AUTO_CREATE_DATABASE=false; expecting pre-created database")
+    }
 
     this.pool = mysql.createPool({
       host: env.MYSQL_HOST,
@@ -34,6 +39,7 @@ export class MysqlStateRepo {
       user: env.MYSQL_USER,
       password: env.MYSQL_PASSWORD,
       database: env.MYSQL_DATABASE,
+      charset: "utf8mb4",
       ...(env.MYSQL_SSL_REQUIRED ? { ssl: { rejectUnauthorized: true } } : {}),
       waitForConnections: true,
       connectionLimit: 10,
@@ -179,6 +185,7 @@ export class MysqlStateRepo {
 
       await conn.query("DELETE FROM support_messages")
       await conn.query("DELETE FROM support_tickets")
+      await conn.query("DELETE FROM check_listings")
       await conn.query("DELETE FROM showroom_orders")
       await conn.query("DELETE FROM showroom_vehicles")
       await conn.query("DELETE FROM auto_loans")
@@ -474,6 +481,31 @@ export class MysqlStateRepo {
             order.status,
             this.toDate(order.createdAt),
             this.toDate(order.updatedAt),
+          ]
+        )
+      }
+
+      for (const [, listing] of snapshot.checkListings ?? []) {
+        await conn.query(
+          `INSERT INTO check_listings (
+            id, owner_user_id, owner_email, owner_name, owner_phone, vehicle_model, vehicle_year, city,
+            suggested_price_irr, delivery_date, notes, status, created_at, updated_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [
+            listing.id,
+            listing.ownerUserId,
+            listing.ownerEmail,
+            listing.ownerName,
+            listing.ownerPhone ?? null,
+            listing.vehicleModel,
+            listing.vehicleYear ?? null,
+            listing.city,
+            listing.suggestedPriceIrr,
+            this.toDate(listing.deliveryDate),
+            listing.notes ?? null,
+            listing.status,
+            this.toDate(listing.createdAt),
+            this.toDate(listing.updatedAt),
           ]
         )
       }

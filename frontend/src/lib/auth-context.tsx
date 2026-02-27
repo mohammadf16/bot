@@ -1,8 +1,7 @@
 "use client"
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react"
-import { apiRequest, clearAuthTokens, setAuthTokens } from "./api"
-import { setMockAuthUser } from "./mock-api"
+import { apiRequest, clearAuthTokens, getRefreshToken, setAuthTokens } from "./api"
 
 type AuthUser = {
   id: string
@@ -40,7 +39,7 @@ type AuthContextValue = {
   isLoading: boolean
   isAuthenticated: boolean
   login: (args: { email: string; password: string }) => Promise<AuthUser>
-  register: (args: { email: string; password: string; referralCode?: string }) => Promise<void>
+  register: (args: { email: string; password: string; phone: string; referralCode?: string }) => Promise<void>
   logout: () => Promise<void>
   refreshMe: () => Promise<void>
 }
@@ -95,17 +94,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       { auth: false },
     )
     setAuthTokens({ accessToken: data.accessToken, refreshToken: data.refreshToken })
-    setMockAuthUser(data.user)
-    setUser(data.user)
-    return data.user
+    const me = await fetchMe().catch(() => data.user)
+    setUser(me)
+    return me
   }, [])
 
-  const register = useCallback(async ({ email, password, referralCode }: { email: string; password: string; referralCode?: string }) => {
+  const register = useCallback(async ({ email, password, phone, referralCode }: { email: string; password: string; phone: string; referralCode?: string }) => {
     await apiRequest(
       "/auth/register",
       {
         method: "POST",
-        body: JSON.stringify({ email, password, referralCode }),
+        body: JSON.stringify({ email, password, phone, referralCode }),
       },
       { auth: false },
     )
@@ -113,15 +112,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const logout = useCallback(async () => {
     try {
-      await apiRequest("/auth/logout", {
-        method: "POST",
-        body: JSON.stringify({}),
-      })
+      const refreshToken = getRefreshToken()
+      if (refreshToken) {
+        await apiRequest("/auth/logout", {
+          method: "POST",
+          body: JSON.stringify({ refreshToken }),
+        })
+      }
     } catch {
       // noop
     } finally {
       clearAuthTokens()
-      setMockAuthUser(null)
       setUser(null)
     }
   }, [])

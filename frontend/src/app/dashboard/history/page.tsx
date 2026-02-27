@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react"
 import { ArrowDownLeft, ArrowUpRight, Search } from "lucide-react"
 import toast from "react-hot-toast"
 import { apiRequest } from "@/lib/api"
+import { formatToman } from "@/lib/money"
 
 type Tx = {
   id: string
@@ -71,7 +72,7 @@ export default function HistoryPage() {
                   </td>
                   <td className="p-6 font-mono text-sm opacity-50">{tx.id}</td>
                   <td className="p-6 text-sm font-bold">{new Date(tx.createdAt).toLocaleString("fa-IR")}</td>
-                  <td className="p-6 text-sm font-black">{tx.amount.toLocaleString("fa-IR")}</td>
+                  <td className="p-6 text-sm font-black">{formatToman(tx.amount)}</td>
                   <td className="p-6">{tx.status}</td>
                 </tr>
               ))}

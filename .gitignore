@@ -1,4 +1,14 @@
 node_modules/
 .env
+.env.*
 dist/
 build/
+.next/
+out/
+*.tsbuildinfo
+*.log
+*.zip
+backend/test-*.json
+backend/test-report.json
+backend/uploads/*
+!backend/uploads/.gitkeep

@@ -15,7 +15,7 @@ const registerSchema = z.object({
 })
 
 const loginSchema = z.object({
-  email: z.string().email(),
+  email: z.string().trim().min(3).max(254),
   password: z.string().min(1),
 })
 
@@ -155,13 +155,15 @@ export async function registerAuthRoutes({ app, store }: RouteContext): Promise<
     const parsed = loginSchema.safeParse(request.body)
     if (!parsed.success) return reply.code(400).send({ error: "INVALID_INPUT", details: parsed.error.flatten() })
 
-    const email = parsed.data.email.toLowerCase()
-    const userId = store.usersByEmail.get(email)
+    const identifier = parsed.data.email.toLowerCase()
+    const userId = identifier.includes("@")
+      ? store.usersByEmail.get(identifier)
+      : Array.from(store.users.values()).find((u) => u.profile?.username?.toLowerCase() === identifier)?.id
     if (!userId) {
-      trackLoginAttempt(store, { email, ip: request.ip, success: false, reason: "USER_NOT_FOUND" })
+      trackLoginAttempt(store, { email: identifier, ip: request.ip, success: false, reason: "USER_NOT_FOUND" })
       pushAudit(store, request, {
         action: "AUTH_LOGIN",
-        target: `email:${email}`,
+        target: `login:${identifier}`,
         success: false,
         message: "User not found",
       })
@@ -170,7 +172,7 @@ export async function registerAuthRoutes({ app, store }: RouteContext): Promise<
 
     const user = store.users.get(userId)!
     if (user.status === "suspended") {
-      trackLoginAttempt(store, { email, userId: user.id, ip: request.ip, success: false, reason: "ACCOUNT_SUSPENDED" })
+      trackLoginAttempt(store, { email: user.email, userId: user.id, ip: request.ip, success: false, reason: "ACCOUNT_SUSPENDED" })
       pushAudit(store, request, {
         action: "AUTH_LOGIN",
         target: `user:${user.id}`,
@@ -182,7 +184,7 @@ export async function registerAuthRoutes({ app, store }: RouteContext): Promise<
 
     const valid = await argon2.verify(user.passwordHash, parsed.data.password)
     if (!valid) {
-      trackLoginAttempt(store, { email, userId: user.id, ip: request.ip, success: false, reason: "INVALID_PASSWORD" })
+      trackLoginAttempt(store, { email: user.email, userId: user.id, ip: request.ip, success: false, reason: "INVALID_PASSWORD" })
       pushAudit(store, request, {
         action: "AUTH_LOGIN",
         target: `user:${user.id}`,
@@ -209,7 +211,7 @@ export async function registerAuthRoutes({ app, store }: RouteContext): Promise<
     }
     store.refreshSessions.set(session.id, session)
 
-    trackLoginAttempt(store, { email, userId: user.id, ip: request.ip, success: true, reason: "LOGIN_SUCCESS" })
+    trackLoginAttempt(store, { email: user.email, userId: user.id, ip: request.ip, success: true, reason: "LOGIN_SUCCESS" })
     trackDevice(store, {
       userId: user.id,
       ip: request.ip,

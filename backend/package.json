@@ -11,6 +11,7 @@
     "build": "tsc -p tsconfig.json",
     "start": "node dist/index.js",
     "start:cpanel": "node app.js",
+    "admin:hash-password": "node scripts/hash-admin-password.mjs",
     "test": "node --test --import tsx tests/**/*.test.ts",
     "test:generate": "tsx tests/test-runner.ts",
     "test:generate:large": "tsx tests/test-runner.ts --users 500 --spins 10",

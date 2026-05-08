@@ -21,20 +21,14 @@ const BlogPostUpdateSchema = BlogPostCreateSchema.partial()
 
 export async function registerBlogRoutes({ app, store }: RouteContext) {
   // Admin: Get all blog posts
-  app.get("/admin/blog/posts", async (request, reply) => {
-    if (!request.user?.role || request.user.role !== "admin") {
-      return reply.code(403).send({ error: "Forbidden" })
-    }
+  app.get("/admin/blog/posts", { preHandler: [app.adminOnly] }, async () => {
     const posts = Array.from(store.blogPosts.values())
     return { posts, total: posts.length }
   })
 
   // Admin: Create blog post
-  app.post<{ Body: any }>("/admin/blog/posts", async (request, reply) => {
+  app.post<{ Body: any }>("/admin/blog/posts", { preHandler: [app.adminOnly] }, async (request, reply) => {
     const user = request.user as UserPayload | undefined
-    if (!user?.role || user.role !== "admin") {
-      return reply.code(403).send({ error: "Forbidden" })
-    }
 
     const validated = BlogPostCreateSchema.parse(request.body)
 
@@ -66,12 +60,7 @@ export async function registerBlogRoutes({ app, store }: RouteContext) {
   })
 
   // Admin: Get single blog post
-  app.get<{ Params: { id: string } }>("/admin/blog/posts/:id", async (request, reply) => {
-    const user = request.user as UserPayload | undefined
-    if (!user?.role || user.role !== "admin") {
-      return reply.code(403).send({ error: "Forbidden" })
-    }
-
+  app.get<{ Params: { id: string } }>("/admin/blog/posts/:id", { preHandler: [app.adminOnly] }, async (request, reply) => {
     const post = store.blogPosts.get(request.params.id)
     if (!post) {
       return reply.code(404).send({ error: "Post not found" })
@@ -83,12 +72,8 @@ export async function registerBlogRoutes({ app, store }: RouteContext) {
   // Admin: Update blog post
   app.put<{ Params: { id: string }; Body: any }>(
     "/admin/blog/posts/:id",
+    { preHandler: [app.adminOnly] },
     async (request, reply) => {
-      const user = request.user as UserPayload | undefined
-      if (!user?.role || user.role !== "admin") {
-        return reply.code(403).send({ error: "Forbidden" })
-      }
-
       const post = store.blogPosts.get(request.params.id)
       if (!post) {
         return reply.code(404).send({ error: "Post not found" })
@@ -128,12 +113,8 @@ export async function registerBlogRoutes({ app, store }: RouteContext) {
   // Admin: Delete blog post
   app.delete<{ Params: { id: string } }>(
     "/admin/blog/posts/:id",
+    { preHandler: [app.adminOnly] },
     async (request, reply) => {
-      const user = request.user as UserPayload | undefined
-      if (!user?.role || user.role !== "admin") {
-        return reply.code(403).send({ error: "Forbidden" })
-      }
-
       const post = store.blogPosts.get(request.params.id)
       if (!post) {
         return reply.code(404).send({ error: "Post not found" })

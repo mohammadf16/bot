@@ -10,7 +10,7 @@ import { useAuth } from "@/lib/auth-context"
 export default function LoginPage() {
   const router = useRouter()
   const { login, isAuthenticated, isLoading } = useAuth()
-  const [email, setEmail] = useState("")
+  const [identifier, setIdentifier] = useState("")
   const [password, setPassword] = useState("")
   const [loading, setLoading] = useState(false)
 
@@ -24,7 +24,7 @@ export default function LoginPage() {
     e.preventDefault()
     setLoading(true)
     try {
-      await login({ email, password })
+      await login({ email: identifier, password })
       toast.success("ورود با موفقیت انجام شد")
       router.replace("/")
     } catch (err) {
@@ -43,12 +43,13 @@ export default function LoginPage() {
 
           <form onSubmit={onSubmit} className="space-y-4">
             <div>
-              <label className="block text-sm text-dark-text/70 mb-2">ایمیل</label>
+              <label className="block text-sm text-dark-text/70 mb-2">ایمیل یا نام کاربری</label>
               <input
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
+                type="text"
+                value={identifier}
+                onChange={(e) => setIdentifier(e.target.value)}
                 className="w-full bg-dark-bg/50 border border-dark-border/40 rounded-xl px-4 py-3"
+                autoComplete="username"
                 required
               />
             </div>

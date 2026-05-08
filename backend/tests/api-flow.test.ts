@@ -19,7 +19,7 @@ test("api flow: register -> login -> deposit -> buy ticket -> admin metrics", as
   const regRes = await app.inject({
     method: "POST",
     url: "/api/v1/auth/register",
-    payload: { email: userEmail, password: userPass },
+    payload: { email: userEmail, password: userPass, phone: "09123456789" },
   })
   assert.equal(regRes.statusCode, 201)
 

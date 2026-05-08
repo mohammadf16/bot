@@ -86,13 +86,16 @@ export async function bootstrapStore(store: AppStore, logger: FastifyBaseLogger)
     pricing = policy
   }
 
-  if (env.BOOTSTRAP_ADMIN_EMAIL && env.BOOTSTRAP_ADMIN_PASSWORD) {
+  if (env.BOOTSTRAP_ADMIN_EMAIL && (env.BOOTSTRAP_ADMIN_PASSWORD_HASH || env.BOOTSTRAP_ADMIN_PASSWORD)) {
     const email = env.BOOTSTRAP_ADMIN_EMAIL.toLowerCase()
     if (!store.usersByEmail.has(email)) {
+      const passwordHash = env.BOOTSTRAP_ADMIN_PASSWORD_HASH
+        ? env.BOOTSTRAP_ADMIN_PASSWORD_HASH
+        : await argon2.hash(env.BOOTSTRAP_ADMIN_PASSWORD!, { type: argon2.argon2id })
       const admin: User = {
         id: id("usr"),
         email,
-        passwordHash: await argon2.hash(env.BOOTSTRAP_ADMIN_PASSWORD, { type: argon2.argon2id }),
+        passwordHash,
         role: "admin",
         status: "active",
         walletBalance: 0,
@@ -100,6 +103,7 @@ export async function bootstrapStore(store: AppStore, logger: FastifyBaseLogger)
         referralCode: `ADM-${Math.random().toString(36).slice(2, 8).toUpperCase()}`,
         profile: {
           fullName: "مدیر سیستم",
+          username: env.BOOTSTRAP_ADMIN_USERNAME,
         },
         notificationPrefs: {
           email: true,

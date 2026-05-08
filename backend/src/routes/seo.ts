@@ -160,7 +160,7 @@ function incrementSitemapVersion(current: string | undefined): string {
 export async function registerSEORoutes(ctx: RouteContext): Promise<void> {
   const { app, store } = ctx
 
-  app.get<object>("/admin/seo/stats", async (_request, reply) => {
+  app.get<object>("/admin/seo/stats", { preHandler: [app.adminOnly] }, async (_request, reply) => {
     try {
       const { pages } = await getMergedSEOPages(store.seo.pages)
       const pagesWithMetadata = pages.filter((p) => p.title.trim() && p.description.trim()).length
@@ -187,7 +187,7 @@ export async function registerSEORoutes(ctx: RouteContext): Promise<void> {
     }
   })
 
-  app.get<object>("/admin/seo/pages", async (_request, reply) => {
+  app.get<object>("/admin/seo/pages", { preHandler: [app.adminOnly] }, async (_request, reply) => {
     try {
       const { pages } = await getMergedSEOPages(store.seo.pages)
       reply.send(pages)
@@ -196,7 +196,7 @@ export async function registerSEORoutes(ctx: RouteContext): Promise<void> {
     }
   })
 
-  app.post<{ Body: Partial<SEOPage> }>("/admin/seo/pages", async (request, reply) => {
+  app.post<{ Body: Partial<SEOPage> }>("/admin/seo/pages", { preHandler: [app.adminOnly] }, async (request, reply) => {
     try {
       const pathInput = text(request.body.path)
       if (!pathInput) {
@@ -225,7 +225,7 @@ export async function registerSEORoutes(ctx: RouteContext): Promise<void> {
     }
   })
 
-  app.put<{ Params: { id: string }; Body: Partial<SEOPage> }>("/admin/seo/pages/:id", async (request, reply) => {
+  app.put<{ Params: { id: string }; Body: Partial<SEOPage> }>("/admin/seo/pages/:id", { preHandler: [app.adminOnly] }, async (request, reply) => {
     try {
       const nowIso = new Date().toISOString()
       const existingById = store.seo.pages.find((p) => p.id === request.params.id)
@@ -265,7 +265,7 @@ export async function registerSEORoutes(ctx: RouteContext): Promise<void> {
     }
   })
 
-  app.delete<{ Params: { id: string } }>("/admin/seo/pages/:id", async (request, reply) => {
+  app.delete<{ Params: { id: string } }>("/admin/seo/pages/:id", { preHandler: [app.adminOnly] }, async (request, reply) => {
     try {
       const existingById = store.seo.pages.find((p) => p.id === request.params.id)
       const targetPath =
@@ -286,7 +286,7 @@ export async function registerSEORoutes(ctx: RouteContext): Promise<void> {
     }
   })
 
-  app.get<object>("/admin/seo/structured-data", async (_request, reply) => {
+  app.get<object>("/admin/seo/structured-data", { preHandler: [app.adminOnly] }, async (_request, reply) => {
     try {
       reply.send((store.seo.structuredData || []) as StructuredData[])
     } catch {
@@ -294,7 +294,7 @@ export async function registerSEORoutes(ctx: RouteContext): Promise<void> {
     }
   })
 
-  app.get<object>("/admin/seo/sitemap", async (request, reply) => {
+  app.get<object>("/admin/seo/sitemap", { preHandler: [app.adminOnly] }, async (request, reply) => {
     try {
       const { pages } = await getMergedSEOPages(store.seo.pages)
       reply.send({ content: buildSitemapXml(pages, resolveRequestOrigin(request)) })
@@ -303,7 +303,7 @@ export async function registerSEORoutes(ctx: RouteContext): Promise<void> {
     }
   })
 
-  app.post<object>("/admin/seo/sitemap/regenerate", async (request, reply) => {
+  app.post<object>("/admin/seo/sitemap/regenerate", { preHandler: [app.adminOnly] }, async (request, reply) => {
     try {
       const { pages } = await getMergedSEOPages(store.seo.pages)
       store.seo.sitemapVersion = incrementSitemapVersion(store.seo.sitemapVersion)
@@ -316,7 +316,7 @@ export async function registerSEORoutes(ctx: RouteContext): Promise<void> {
     }
   })
 
-  app.get<object>("/admin/seo/robots", async (request, reply) => {
+  app.get<object>("/admin/seo/robots", { preHandler: [app.adminOnly] }, async (request, reply) => {
     try {
       const origin = resolveRequestOrigin(request)
       const content = text(store.seo.robots) ?? buildDefaultRobots(origin)
@@ -326,7 +326,7 @@ export async function registerSEORoutes(ctx: RouteContext): Promise<void> {
     }
   })
 
-  app.put<{ Body: { content: string } }>("/admin/seo/robots", async (request, reply) => {
+  app.put<{ Body: { content: string } }>("/admin/seo/robots", { preHandler: [app.adminOnly] }, async (request, reply) => {
     try {
       const origin = resolveRequestOrigin(request)
       const content = text(request.body.content) ?? buildDefaultRobots(origin)
@@ -338,7 +338,7 @@ export async function registerSEORoutes(ctx: RouteContext): Promise<void> {
     }
   })
 
-  app.get<object>("/admin/seo/google-analytics", async (_request, reply) => {
+  app.get<object>("/admin/seo/google-analytics", { preHandler: [app.adminOnly] }, async (_request, reply) => {
     try {
       reply.send({
         gaId: text(store.seo.googleAnalytics?.gaId) ?? "",
@@ -351,7 +351,7 @@ export async function registerSEORoutes(ctx: RouteContext): Promise<void> {
     }
   })
 
-  app.put<{ Body: { gaId: string; trackingId: string; enabled: boolean } }>("/admin/seo/google-analytics", async (request, reply) => {
+  app.put<{ Body: { gaId: string; trackingId: string; enabled: boolean } }>("/admin/seo/google-analytics", { preHandler: [app.adminOnly] }, async (request, reply) => {
     try {
       store.seo.googleAnalytics = {
         gaId: text(request.body.gaId) ?? "",
@@ -365,7 +365,7 @@ export async function registerSEORoutes(ctx: RouteContext): Promise<void> {
     }
   })
 
-  app.get<object>("/admin/seo/google-search-console", async (_request, reply) => {
+  app.get<object>("/admin/seo/google-search-console", { preHandler: [app.adminOnly] }, async (_request, reply) => {
     try {
       reply.send({
         propertyId: text(store.seo.googleSearchConsole?.propertyId) ?? "",
@@ -378,7 +378,7 @@ export async function registerSEORoutes(ctx: RouteContext): Promise<void> {
     }
   })
 
-  app.put<{ Body: { propertyId: string; verificationCode: string; enabled: boolean } }>("/admin/seo/google-search-console", async (request, reply) => {
+  app.put<{ Body: { propertyId: string; verificationCode: string; enabled: boolean } }>("/admin/seo/google-search-console", { preHandler: [app.adminOnly] }, async (request, reply) => {
     try {
       store.seo.googleSearchConsole = {
         propertyId: text(request.body.propertyId) ?? "",
@@ -392,7 +392,7 @@ export async function registerSEORoutes(ctx: RouteContext): Promise<void> {
     }
   })
 
-  app.get<object>("/admin/seo/keywords", async (_request, reply) => {
+  app.get<object>("/admin/seo/keywords", { preHandler: [app.adminOnly] }, async (_request, reply) => {
     try {
       const { pages } = await getMergedSEOPages(store.seo.pages)
       const usage = new Map<string, number>()
@@ -418,7 +418,7 @@ export async function registerSEORoutes(ctx: RouteContext): Promise<void> {
     }
   })
 
-  app.get<object>("/admin/seo/backlinks", async (_request, reply) => {
+  app.get<object>("/admin/seo/backlinks", { preHandler: [app.adminOnly] }, async (_request, reply) => {
     try {
       const backlinks = normalizeBacklinks(store.seo.backlinks)
       const topBacklinks = [...backlinks].sort((a, b) => b.authority - a.authority).slice(0, 10)
@@ -438,7 +438,7 @@ export async function registerSEORoutes(ctx: RouteContext): Promise<void> {
     }
   })
 
-  app.get<object>("/admin/seo/mobile-optimization", async (_request, reply) => {
+  app.get<object>("/admin/seo/mobile-optimization", { preHandler: [app.adminOnly] }, async (_request, reply) => {
     try {
       const { pages } = await getMergedSEOPages(store.seo.pages)
       const indexable = pages.filter((p) => isIndexableSeoPage(p))
@@ -465,7 +465,7 @@ export async function registerSEORoutes(ctx: RouteContext): Promise<void> {
     }
   })
 
-  app.get<object>("/admin/seo/content-quality", async (_request, reply) => {
+  app.get<object>("/admin/seo/content-quality", { preHandler: [app.adminOnly] }, async (_request, reply) => {
     try {
       const { pages } = await getMergedSEOPages(store.seo.pages)
       const totalPages = pages.length
@@ -499,7 +499,7 @@ export async function registerSEORoutes(ctx: RouteContext): Promise<void> {
     }
   })
 
-  app.get<object>("/admin/seo/audit", async (request, reply) => {
+  app.get<object>("/admin/seo/audit", { preHandler: [app.adminOnly] }, async (request, reply) => {
     try {
       const { pages } = await getMergedSEOPages(store.seo.pages)
       const origin = resolveRequestOrigin(request)
@@ -551,7 +551,7 @@ export async function registerSEORoutes(ctx: RouteContext): Promise<void> {
     }
   })
 
-  app.get<object>("/admin/seo/metrics", async (_request, reply) => {
+  app.get<object>("/admin/seo/metrics", { preHandler: [app.adminOnly] }, async (_request, reply) => {
     try {
       const { pages } = await getMergedSEOPages(store.seo.pages)
       const metadataCoverage = percent(pages.filter((p) => p.title.trim() && p.description.trim()).length, pages.length)
@@ -580,7 +580,7 @@ export async function registerSEORoutes(ctx: RouteContext): Promise<void> {
     }
   })
 
-  app.get<object>("/admin/seo/competitors", async (_request, reply) => {
+  app.get<object>("/admin/seo/competitors", { preHandler: [app.adminOnly] }, async (_request, reply) => {
     try {
       const competitors = normalizeCompetitors(store.seo.competitors)
       const backlinks = normalizeBacklinks(store.seo.backlinks)
@@ -600,3 +600,4 @@ export async function registerSEORoutes(ctx: RouteContext): Promise<void> {
     }
   })
 }
+
